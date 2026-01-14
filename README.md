@@ -4,6 +4,10 @@
 
 CLI + GitHub Action to run Omni Content Validator on pull requests, keep a history artifact, and surface new vs existing failures.
 
+## Demo video
+
+Watch the demo: https://screen.studio/share/OFqWgCI7
+
 ## CLI usage
 
 Install locally with pipx:
@@ -70,3 +74,7 @@ Configure these in GitHub:
 ## Limitations
 
 The content validator endpoint currently validates all content and does not support filters. That means the PR report may include unrelated failures. The workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
+
+## Disclaimer
+
+This project is community-built and not an official Omni release. Use it at your own risk and review the code before running it in production.
