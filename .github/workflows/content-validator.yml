@@ -162,20 +162,6 @@ jobs:
               formatList(report.resolved_issue_samples),
             ].join('\n');
 
-            await github.rest.checks.create({
-              owner,
-              repo,
-              name: 'Content Validator',
-              head_sha: sha,
-              status: 'completed',
-              conclusion,
-              output: {
-                title: 'Content Validator Results',
-                summary,
-                text,
-              },
-            });
-
             if (!context.payload.pull_request) {
               return;
             }
