@@ -1,0 +1,217 @@
+name: Content Validator
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-content:
+    runs-on: ubuntu-latest
+    env:
+      OMNI_BASE_URL: ${{ vars.OMNI_BASE_URL || secrets.OMNI_BASE_URL }}
+      OMNI_MODEL_ID: ${{ vars.OMNI_MODEL_ID || secrets.OMNI_MODEL_ID }}
+      OMNI_API_KEY: ${{ secrets.OMNI_API_KEY }}
+      OMNI_USER_ID: ${{ vars.OMNI_USER_ID || secrets.OMNI_USER_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install -e .
+
+      - name: Find previous history artifact
+        id: history
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const workflowFile = 'content-validator.yml';
+            const defaultBranch = context.payload.repository.default_branch;
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: workflowFile,
+              branch: defaultBranch,
+              status: 'success',
+              per_page: 5,
+            });
+
+            for (const run of runs.data.workflow_runs) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner,
+                repo,
+                run_id: run.id,
+              });
+
+              const match = artifacts.data.artifacts.find(
+                (artifact) => artifact.name === 'content-validator-history' && !artifact.expired,
+              );
+
+              if (match) {
+                core.setOutput('run_id', run.id.toString());
+                return;
+              }
+            }
+
+            core.setOutput('run_id', '');
+
+      - name: Download history artifact
+        if: steps.history.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: content-validator-history
+          run-id: ${{ steps.history.outputs.run_id }}
+          path: .omni-content-validator
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run content validator
+        id: validator
+        run: |
+          omni-content-validator \
+            --history-in .omni-content-validator/history.json \
+            --history-out .omni-content-validator/history.json \
+            --report-out .omni-content-validator/report.json
+
+      - name: Upload history artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: content-validator-history
+          path: .omni-content-validator/history.json
+          if-no-files-found: ignore
+
+      - name: Report check and PR comment
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const sha = context.payload.pull_request ? context.payload.pull_request.head.sha : context.sha;
+
+            let report = null;
+            let reportMissing = false;
+            try {
+              report = JSON.parse(fs.readFileSync('.omni-content-validator/report.json', 'utf8'));
+            } catch (error) {
+              reportMissing = true;
+              report = {
+                total_issues: 0,
+                new_issues: 0,
+                existing_issues: 0,
+                resolved_issues: 0,
+                new_issue_samples: [],
+                existing_issue_samples: [],
+                resolved_issue_samples: [],
+              };
+            }
+
+            const conclusion = reportMissing || report.total_issues > 0 ? 'failure' : 'success';
+            const modelUrl = report.base_url && report.model_id
+              ? `${report.base_url.replace(/\\/$/, '')}/models/${report.model_id}`
+              : null;
+            const summary = [
+              `Total issues: ${report.total_issues}`,
+              `New issues: ${report.new_issues}`,
+              `Existing issues: ${report.existing_issues}`,
+              `Resolved issues: ${report.resolved_issues}`,
+              modelUrl ? `Model: ${modelUrl}` : null,
+              reportMissing ? 'Report missing: validator did not produce output.' : null,
+            ].filter(Boolean).join('\n');
+
+            const formatList = (items) => {
+              if (!items || items.length === 0) return '_None_';
+              return items.map((item) => {
+                const raw = item.raw || {};
+                const docName = raw.document_name || 'Unknown document';
+                const queryName = raw.query_name || raw.issue_type || 'Issue';
+                const header = `${docName} / ${queryName}`;
+                const message = raw.message || item.summary || 'No details';
+                return `- ${header}\n\n\`\`\`\n${message}\n\`\`\``;
+              }).join('\n');
+            };
+
+            const text = [
+              '### Content Validator',
+              '',
+              '**New issues**',
+              formatList(report.new_issue_samples),
+              '',
+              '**Existing issues**',
+              formatList(report.existing_issue_samples),
+              '',
+              '**Resolved issues**',
+              formatList(report.resolved_issue_samples),
+            ].join('\n');
+
+            await github.rest.checks.create({
+              owner,
+              repo,
+              name: 'Content Validator',
+              head_sha: sha,
+              status: 'completed',
+              conclusion,
+              output: {
+                title: 'Content Validator Results',
+                summary,
+                text,
+              },
+            });
+
+            if (!context.payload.pull_request) {
+              return;
+            }
+
+            const marker = '<!-- omni-content-validator -->';
+            const body = [
+              marker,
+              '## Content Validator',
+              '',
+              summary,
+              '',
+              '**New issues**',
+              formatList(report.new_issue_samples),
+              '',
+              '**Existing issues**',
+              formatList(report.existing_issue_samples),
+              '',
+              '**Resolved issues**',
+              formatList(report.resolved_issue_samples),
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
