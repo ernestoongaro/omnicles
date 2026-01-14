@@ -1,5 +1,7 @@
 # Omni Content Validator CI
 
+![Omni Content Validator](assets/logo.png)
+
 CLI + GitHub Action to run Omni Content Validator on pull requests, keep a history artifact, and surface new vs existing failures.
 
 ## CLI usage
