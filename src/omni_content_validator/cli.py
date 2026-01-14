@@ -210,6 +210,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--model-id", default=os.getenv("OMNI_MODEL_ID"))
     parser.add_argument("--api-key", default=os.getenv("OMNI_API_KEY"))
     parser.add_argument("--user-id", default=os.getenv("OMNI_USER_ID"))
+    parser.add_argument("--branch-id", default=os.getenv("OMNI_BRANCH_ID"))
     parser.add_argument("--auth-header", default="Authorization")
     parser.add_argument("--auth-scheme", default="Bearer")
     parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
@@ -244,6 +245,8 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
     params = {}
     if args.user_id:
         params["userId"] = args.user_id
+    if args.branch_id:
+        params["branch_id"] = args.branch_id
 
     response = requests.get(url, headers=headers, params=params, timeout=args.timeout)
     if not response.ok:

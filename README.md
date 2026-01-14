@@ -16,7 +16,8 @@ Run:
 omni-content-validator \
   --base-url https://ernesto.playground.exploreomni.dev \
   --model-id <MODEL_ID> \
-  --api-key <API_KEY>
+  --api-key <API_KEY> \
+  --branch-id <BRANCH_ID>
 ```
 
 Optional flags:
@@ -33,6 +34,7 @@ Environment variables:
 - `OMNI_API_KEY`
 - `OMNI_USER_ID`
 - `OMNI_ISSUES_PATH`
+- `OMNI_BRANCH_ID` (defaults to the GitHub branch name in the workflow)
 
 Example local env setup:
 

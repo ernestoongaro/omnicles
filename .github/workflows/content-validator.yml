@@ -18,6 +18,7 @@ jobs:
       OMNI_MODEL_ID: ${{ vars.OMNI_MODEL_ID || secrets.OMNI_MODEL_ID }}
       OMNI_API_KEY: ${{ secrets.OMNI_API_KEY }}
       OMNI_USER_ID: ${{ vars.OMNI_USER_ID || secrets.OMNI_USER_ID }}
+      OMNI_BRANCH_ID: ${{ vars.OMNI_BRANCH_ID || secrets.OMNI_BRANCH_ID || github.head_ref || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
