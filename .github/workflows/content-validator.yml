@@ -28,7 +28,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: python -m pip install -e .
+        run: python -m pip install git+https://github.com/ernestoongaro/omnicles.git
 
       - name: Find previous history artifact
         id: history
@@ -120,8 +120,11 @@ jobs:
             }
 
             const conclusion = reportMissing || report.total_issues > 0 ? 'failure' : 'success';
-            const modelUrl = report.base_url && report.model_id
-              ? `${report.base_url.replace(/\\/$/, '')}/models/${report.model_id}`
+            const baseUrl = report.base_url
+              ? (report.base_url.endsWith('/') ? report.base_url.slice(0, -1) : report.base_url)
+              : null;
+            const modelUrl = baseUrl && report.model_id
+              ? `${baseUrl}/models/${report.model_id}`
               : null;
             const summary = [
               `Total issues: ${report.total_issues}`,
