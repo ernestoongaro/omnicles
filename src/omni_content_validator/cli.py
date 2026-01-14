@@ -119,9 +119,7 @@ def _extract_issues(payload: Any, issues_path: Optional[str]) -> List[Any]:
             return value
 
     if "content" in payload:
-        collected = _collect_content_issues(payload)
-        if collected:
-            return collected
+        return _collect_content_issues(payload)
 
     for key in ("content", "documents", "items", "results"):
         value = payload.get(key)
