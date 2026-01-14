@@ -17,12 +17,14 @@ omni-content-validator \
   --base-url https://ernesto.playground.exploreomni.dev \
   --model-id <MODEL_ID> \
   --api-key <API_KEY> \
-  --branch-id <BRANCH_ID>
+  --branch-name <BRANCH_NAME>
 ```
 
 Optional flags:
 
 - `--user-id` to act on behalf of a user for org API keys.
+- `--branch-name` to resolve and validate against an Omni branch with the same name.
+- `--branch-id` to validate against a specific Omni branch UUID.
 - `--issues-path` to point at the array of issues in the JSON response (dot path). By default, the CLI looks for `issues` arrays or the `content[].queries_and_issues[].issues` and `content[].dashboard_filter_issues` arrays.
 - `--fail-on-new-only` to fail only when new issues appear vs history.
 - `--auth-header` and `--auth-scheme` to override auth header formatting (defaults to `Authorization: Bearer <token>`).
@@ -34,7 +36,8 @@ Environment variables:
 - `OMNI_API_KEY`
 - `OMNI_USER_ID`
 - `OMNI_ISSUES_PATH`
-- `OMNI_BRANCH_ID` (defaults to the GitHub branch name in the workflow)
+- `OMNI_BRANCH_ID` (optional override if you already know the Omni branch UUID)
+- `OMNI_BRANCH_NAME` (used to resolve the Omni branch UUID by name)
 
 Example local env setup:
 

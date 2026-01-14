@@ -211,6 +211,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--api-key", default=os.getenv("OMNI_API_KEY"))
     parser.add_argument("--user-id", default=os.getenv("OMNI_USER_ID"))
     parser.add_argument("--branch-id", default=os.getenv("OMNI_BRANCH_ID"))
+    parser.add_argument("--branch-name", default=os.getenv("OMNI_BRANCH_NAME"))
     parser.add_argument("--auth-header", default="Authorization")
     parser.add_argument("--auth-scheme", default="Bearer")
     parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
@@ -260,9 +261,52 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
     return payload
 
 
+def _resolve_branch_id(args: argparse.Namespace) -> Optional[str]:
+    if args.branch_id:
+        return args.branch_id
+    if not args.branch_name:
+        return None
+
+    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    cursor = None
+    while True:
+        params = {}
+        if cursor:
+            params["cursor"] = cursor
+        url = f"{args.base_url.rstrip('/')}/api/v1/models"
+        response = requests.get(url, headers=headers, params=params, timeout=args.timeout)
+        if not response.ok:
+            raise SystemExit(
+                f"Branch lookup failed: {response.status_code} {response.text}"
+            )
+        payload = response.json()
+        for record in payload.get("records", []):
+            if record.get("modelKind") != "BRANCH":
+                continue
+            if record.get("baseModelId") != args.model_id:
+                continue
+            if record.get("name") != args.branch_name:
+                continue
+            return record.get("id")
+
+        cursor = payload.get("pageInfo", {}).get("nextCursor")
+        if not cursor:
+            return None
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parse_args(argv)
     _validate_args(args)
+
+    resolved_branch_id = _resolve_branch_id(args)
+    if resolved_branch_id:
+        args.branch_id = resolved_branch_id
+        if args.branch_name:
+            print(f"Resolved branch '{args.branch_name}' to id {resolved_branch_id}")
+        else:
+            print(f"Using branch id {resolved_branch_id}")
+    elif args.branch_name:
+        print(f"No matching Omni branch found for '{args.branch_name}', using default")
 
     payload = _fetch_validator_payload(args)
     if args.raw_response_out:
