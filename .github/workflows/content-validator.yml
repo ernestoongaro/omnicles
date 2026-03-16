@@ -19,6 +19,7 @@ jobs:
       OMNI_API_KEY: ${{ secrets.OMNI_API_KEY }}
       OMNI_USER_ID: ${{ vars.OMNI_USER_ID || secrets.OMNI_USER_ID }}
       OMNI_BRANCH_ID: ${{ vars.OMNI_BRANCH_ID || secrets.OMNI_BRANCH_ID }}
+      OMNI_INCLUDE_PERSONAL_FOLDERS: ${{ vars.OMNI_INCLUDE_PERSONAL_FOLDERS || secrets.OMNI_INCLUDE_PERSONAL_FOLDERS }}
       OMNI_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Checkout
@@ -115,6 +116,7 @@ jobs:
                 new_issues: 0,
                 existing_issues: 0,
                 resolved_issues: 0,
+                include_personal_folders: false,
                 new_issue_samples: [],
                 existing_issue_samples: [],
                 resolved_issue_samples: [],
@@ -133,6 +135,7 @@ jobs:
               `New issues: ${report.new_issues}`,
               `Existing issues: ${report.existing_issues}`,
               `Resolved issues: ${report.resolved_issues}`,
+              report.include_personal_folders ? 'Scope: includes personal folders' : null,
               modelUrl ? `Model: ${modelUrl}` : null,
               reportMissing ? 'Report missing: validator did not produce output.' : null,
             ].filter(Boolean).join('\n');

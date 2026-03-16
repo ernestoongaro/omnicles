@@ -31,6 +31,7 @@ Optional flags:
 - `--user-id` to act on behalf of a user for org API keys.
 - `--branch-name` to resolve and validate against an Omni branch with the same name.
 - `--branch-id` to validate against a specific Omni branch UUID.
+- `--include-personal-folders` to include personal folders in the validation search.
 - `--issues-path` to point at the array of issues in the JSON response (dot path). By default, the CLI looks for `issues` arrays or the `content[].queries_and_issues[].issues` and `content[].dashboard_filter_issues` arrays.
 - `--fail-on-new-only` to fail only when new issues appear vs history.
 - `--auth-header` and `--auth-scheme` to override auth header formatting (defaults to `Authorization: Bearer <token>`).
@@ -41,6 +42,7 @@ Environment variables:
 - `OMNI_MODEL_ID`
 - `OMNI_API_KEY`
 - `OMNI_USER_ID`
+- `OMNI_INCLUDE_PERSONAL_FOLDERS`
 - `OMNI_ISSUES_PATH`
 - `OMNI_BRANCH_ID` (optional override if you already know the Omni branch UUID)
 - `OMNI_BRANCH_NAME` (used to resolve the Omni branch UUID by name)
@@ -52,6 +54,7 @@ export OMNI_BASE_URL="https://ernesto.playground.exploreomni.dev"
 export OMNI_MODEL_ID="..."
 export OMNI_API_KEY="..."
 export OMNI_USER_ID="..." # optional
+export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 ```
 
 ## GitHub Action
@@ -64,6 +67,7 @@ Configure these in GitHub:
 - `OMNI_BASE_URL` (variable or secret)
 - `OMNI_MODEL_ID` (variable or secret)
 - `OMNI_USER_ID` (optional variable or secret)
+- `OMNI_INCLUDE_PERSONAL_FOLDERS` (optional variable or secret)
 
 ### Testing the workflow
 

@@ -200,6 +200,13 @@ def _build_headers(api_key: str, auth_header: str, auth_scheme: str) -> Dict[str
     return {auth_header: token_value}
 
 
+def _env_flag(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run Omni content validator and track history",
@@ -213,6 +220,12 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--auth-header", default="Authorization")
     parser.add_argument("--auth-scheme", default="Bearer")
     parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
+    parser.add_argument(
+        "--include-personal-folders",
+        action=argparse.BooleanOptionalAction,
+        default=_env_flag("OMNI_INCLUDE_PERSONAL_FOLDERS"),
+        help="Include personal folders in the validation search",
+    )
     parser.add_argument("--timeout", type=int, default=60)
     parser.add_argument("--history-in", default=".omni-content-validator/history.json")
     parser.add_argument("--history-out", default=".omni-content-validator/history.json")
@@ -246,6 +259,8 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
         params["userId"] = args.user_id
     if args.branch_id:
         params["branch_id"] = args.branch_id
+    if args.include_personal_folders:
+        params["include_personal_folders"] = "true"
 
     response = requests.get(url, headers=headers, params=params, timeout=args.timeout)
     if not response.ok:
@@ -324,6 +339,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
         "base_url": args.base_url,
         "model_id": args.model_id,
+        "include_personal_folders": args.include_personal_folders,
         "total_issues": len(normalized),
         "new_issues": len(new_items),
         "existing_issues": len(existing_items),
@@ -341,6 +357,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "generated_at": report["generated_at"],
             "base_url": args.base_url,
             "model_id": args.model_id,
+            "include_personal_folders": args.include_personal_folders,
             "issues": normalized,
         },
     )
