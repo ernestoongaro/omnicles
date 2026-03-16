@@ -126,7 +126,7 @@ jobs:
               ? (report.base_url.endsWith('/') ? report.base_url.slice(0, -1) : report.base_url)
               : null;
             const modelUrl = baseUrl && report.model_id
-              ? `${baseUrl}/models/${report.model_id}`
+              ? `${baseUrl}/models/${report.model_id}/ide`
               : null;
             const summary = [
               `Total issues: ${report.total_issues}`,
