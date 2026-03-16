@@ -51,6 +51,9 @@ def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
             "document_id": document.get("document_id"),
             "document_name": document.get("name"),
             "document_type": document.get("type"),
+            "document_url": document.get("url")
+            if isinstance(document.get("url"), str)
+            else None,
             "folder_name": document.get("folder", {}).get("name")
             if isinstance(document.get("folder"), dict)
             else None,
