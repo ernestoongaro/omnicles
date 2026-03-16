@@ -137,13 +137,31 @@ jobs:
               reportMissing ? 'Report missing: validator did not produce output.' : null,
             ].filter(Boolean).join('\n');
 
+            const escapeMarkdownLinkText = (value) => String(value)
+              .replace(/\\/g, '\\\\')
+              .replace(/\[/g, '\\[')
+              .replace(/\]/g, '\\]');
+
             const formatList = (items) => {
               if (!items || items.length === 0) return '_None_';
               return items.map((item) => {
                 const raw = item.raw || {};
-                const docName = raw.document_name || 'Unknown document';
-                const queryName = raw.query_name || raw.issue_type || 'Issue';
-                const header = `${docName} / ${queryName}`;
+                const docName = raw.document_name || raw.name || 'Unknown document';
+                const queryName = raw.query_name || null;
+                const issueType = raw.issue_type || null;
+                const documentUrl = typeof raw.document_url === 'string'
+                  ? raw.document_url
+                  : (typeof raw.url === 'string' ? raw.url : null);
+                const docLabel = documentUrl
+                  ? `[${escapeMarkdownLinkText(docName)}](${documentUrl})`
+                  : docName;
+                const headerParts = [docLabel];
+                if (queryName) {
+                  headerParts.push(queryName);
+                } else if (issueType) {
+                  headerParts.push(issueType);
+                }
+                const header = headerParts.join(' / ');
                 const message = raw.message || item.summary || 'No details';
                 return `- ${header}\n\n\`\`\`\n${message}\n\`\`\``;
               }).join('\n');
