@@ -71,6 +71,13 @@ Configure these in GitHub:
 2. Run the workflow once on the default branch (via the Actions tab or a small commit) to seed the history artifact.
 3. Open a PR and confirm the check run + PR comment show the validation results.
 
+## Releases
+
+Releases are managed with Release Please via `.github/workflows/release-please.yml`.
+
+- Merge changes into `main` with conventional commit messages such as `feat:`, `fix:`, or `chore:` so Release Please can infer the next version and changelog entries.
+- Set `RELEASE_PLEASE_TOKEN` to a GitHub PAT if you want other workflows to run on release PRs. If that secret is not configured, the workflow falls back to the default GitHub token.
+
 ## Limitations
 
 The content validator endpoint currently validates all content and does not support filters. That means the PR report may include unrelated failures. The workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
