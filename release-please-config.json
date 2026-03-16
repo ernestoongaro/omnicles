@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "d1c1a53b91fad07e66494ac4aa4eb2c24f4faef6",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "omni-content-validator",
+      "include-component-in-tag": false,
+      "include-v-in-tag": false
+    }
+  }
+}
