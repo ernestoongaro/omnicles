@@ -69,7 +69,7 @@ Available examples:
 
 To enable them in your own repo, copy the files you want into `.github/workflows/`.
 
-The content validator example in `.github/workflow-examples/content-validator.yml` is designed to run on pushes to `main`, pull requests, and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
+The content validator example in `.github/workflow-examples/content-validator.yml` is designed to run on pull requests and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
 
 Configure these in GitHub:
 
@@ -83,7 +83,7 @@ Configure these in GitHub:
 
 1. Copy `.github/workflow-examples/content-validator.yml` to `.github/workflows/content-validator.yml`.
 2. Add the secrets/variables above in GitHub repo settings.
-3. Push to `main` once (or run the workflow manually on `main`) to seed the history artifact.
+3. Run the workflow manually on your default branch once to seed the history artifact.
 4. Open a PR and confirm the check run plus PR comment show the validation results.
 
 ## Releases

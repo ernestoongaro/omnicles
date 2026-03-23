@@ -1,8 +1,6 @@
 name: Content Validator
 
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -22,7 +20,7 @@ jobs:
       OMNI_USER_ID: ${{ vars.OMNI_USER_ID || secrets.OMNI_USER_ID }}
       OMNI_BRANCH_ID: ${{ vars.OMNI_BRANCH_ID || secrets.OMNI_BRANCH_ID }}
       OMNI_INCLUDE_PERSONAL_FOLDERS: ${{ vars.OMNI_INCLUDE_PERSONAL_FOLDERS || secrets.OMNI_INCLUDE_PERSONAL_FOLDERS }}
-      OMNI_BRANCH_NAME: ${{ github.head_ref }}
+      OMNI_BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
