@@ -2,7 +2,7 @@
 
 ![Omni Content Validator](assets/logo.png)
 
-CLI plus example GitHub Actions workflows for running Omni Content Validator, keeping a history artifact, and surfacing new vs existing failures.
+CLI plus GitHub Actions support for running Omni Content Validator, keeping a history artifact, and surfacing new vs existing failures.
 
 ## Demo video
 
@@ -57,19 +57,16 @@ export OMNI_USER_ID="..." # optional
 export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 ```
 
-## GitHub Action
+## GitHub Actions
 
-This repo keeps workflow examples in `.github/workflow-examples/` so they do not run automatically here.
+This repo includes live workflows for:
 
-Available examples:
+- `.github/workflows/actionlint.yml`
+- `.github/workflows/release-please.yml`
 
-- `.github/workflow-examples/content-validator.yml`
-- `.github/workflow-examples/actionlint.yml`
-- `.github/workflow-examples/release-please.yml`
+The content validator workflow is kept as an example in `.github/workflow-examples/content-validator.yml` so it does not run automatically in this repository. To enable it in your own repo, copy it to `.github/workflows/content-validator.yml`.
 
-To enable them in your own repo, copy the files you want into `.github/workflows/`.
-
-The content validator example in `.github/workflow-examples/content-validator.yml` is designed to run on pull requests and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
+The content validator example is designed to run on pull requests and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
 
 Configure these in GitHub:
 
@@ -88,7 +85,7 @@ Configure these in GitHub:
 
 ## Releases
 
-The Release Please example lives at `.github/workflow-examples/release-please.yml`. Copy it into `.github/workflows/release-please.yml` if you want automated releases in your own repo.
+Releases are managed in this repo by `.github/workflows/release-please.yml`.
 
 - Merge changes into `main` with conventional commit messages such as `feat:`, `fix:`, or `chore:` so Release Please can infer the next version and changelog entries.
 - Set `RELEASE_PLEASE_TOKEN` to a GitHub PAT if you want other workflows to run on release PRs. If that secret is not configured, the workflow falls back to the default GitHub token.
