@@ -59,7 +59,7 @@ export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 
 ## GitHub Action
 
-The workflow in `.github/workflows/content-validator.yml` runs on PRs, downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment.
+The workflow in `.github/workflows/content-validator.yml` runs on pushes to `main`, pull requests, and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
 
 Configure these in GitHub:
 
@@ -72,7 +72,7 @@ Configure these in GitHub:
 ### Testing the workflow
 
 1. Add the secrets/variables above in GitHub repo settings.
-2. Run the workflow once on the default branch (via the Actions tab or a small commit) to seed the history artifact.
+2. Push to `main` once (or run the workflow manually on `main`) to seed the history artifact.
 3. Open a PR and confirm the check run + PR comment show the validation results.
 
 ## Releases
