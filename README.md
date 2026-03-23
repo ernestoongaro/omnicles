@@ -2,7 +2,7 @@
 
 ![Omni Content Validator](assets/logo.png)
 
-CLI + GitHub Action to run Omni Content Validator on pull requests, keep a history artifact, and surface new vs existing failures.
+CLI plus GitHub Actions support for running Omni Content Validator, keeping a history artifact, and surfacing new vs existing failures.
 
 ## Demo video
 
@@ -57,9 +57,16 @@ export OMNI_USER_ID="..." # optional
 export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 ```
 
-## GitHub Action
+## GitHub Actions
 
-The workflow in `.github/workflows/content-validator.yml` runs on PRs, downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment.
+This repo includes live workflows for:
+
+- `.github/workflows/actionlint.yml`
+- `.github/workflows/release-please.yml`
+
+The content validator workflow is kept as an example in `.github/workflow-examples/content-validator.yml` so it does not run automatically in this repository. To enable it in your own repo, copy it to `.github/workflows/content-validator.yml`.
+
+The content validator example is designed to run on pull requests and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
 
 Configure these in GitHub:
 
@@ -71,20 +78,21 @@ Configure these in GitHub:
 
 ### Testing the workflow
 
-1. Add the secrets/variables above in GitHub repo settings.
-2. Run the workflow once on the default branch (via the Actions tab or a small commit) to seed the history artifact.
-3. Open a PR and confirm the check run + PR comment show the validation results.
+1. Copy `.github/workflow-examples/content-validator.yml` to `.github/workflows/content-validator.yml`.
+2. Add the secrets/variables above in GitHub repo settings.
+3. Run the workflow manually on your default branch once to seed the history artifact.
+4. Open a PR and confirm the check run plus PR comment show the validation results.
 
 ## Releases
 
-Releases are managed with Release Please via `.github/workflows/release-please.yml`.
+Releases are managed in this repo by `.github/workflows/release-please.yml`.
 
 - Merge changes into `main` with conventional commit messages such as `feat:`, `fix:`, or `chore:` so Release Please can infer the next version and changelog entries.
 - Set `RELEASE_PLEASE_TOKEN` to a GitHub PAT if you want other workflows to run on release PRs. If that secret is not configured, the workflow falls back to the default GitHub token.
 
 ## Limitations
 
-The content validator endpoint currently validates all content and does not support filters. That means the PR report may include unrelated failures. The workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
+The content validator endpoint currently validates all content and does not support filters. That means the PR report may include unrelated failures. The example workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
 
 ## Disclaimer
 
