@@ -242,12 +242,8 @@ def _partition_issues(
     return new_items, existing_items, resolved_items
 
 
-def _build_headers(api_key: str, auth_header: str, auth_scheme: str) -> Dict[str, str]:
-    if auth_scheme:
-        token_value = f"{auth_scheme} {api_key}".strip()
-    else:
-        token_value = api_key
-    return {auth_header: token_value}
+def _build_headers(api_key: str) -> Dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"}
 
 
 def _env_flag(name: str) -> bool:
@@ -287,12 +283,6 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--user-id", default=os.getenv("OMNI_USER_ID"))
     parser.add_argument("--branch-id", default=os.getenv("OMNI_BRANCH_ID"))
     parser.add_argument("--branch-name", default=os.getenv("OMNI_BRANCH_NAME"))
-    parser.add_argument(
-        "--auth-header", default=os.getenv("OMNI_AUTH_HEADER", "Authorization")
-    )
-    parser.add_argument(
-        "--auth-scheme", default=os.getenv("OMNI_AUTH_SCHEME", "Bearer")
-    )
     parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
     parser.add_argument(
         "--labels",
@@ -346,7 +336,7 @@ def _validate_args(args: argparse.Namespace) -> None:
 
 def _fetch_validator_payload(args: argparse.Namespace) -> Any:
     url = f"{args.base_url.rstrip('/')}/api/v1/models/{args.model_id}/content-validator"
-    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    headers = _build_headers(args.api_key)
     params = {}
     if args.user_id:
         params["userId"] = args.user_id
@@ -368,7 +358,7 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
 
 
 def _fetch_content_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
-    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    headers = _build_headers(args.api_key)
     url = f"{args.base_url.rstrip('/')}/api/v1/content"
     records: List[Dict[str, Any]] = []
     cursor = None
@@ -488,7 +478,7 @@ def _resolve_branch_id(args: argparse.Namespace) -> Optional[str]:
     if not args.branch_name:
         return None
 
-    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    headers = _build_headers(args.api_key)
     cursor = None
     while True:
         params = {}

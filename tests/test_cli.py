@@ -42,8 +42,6 @@ class ParseArgsTests(unittest.TestCase):
     @mock.patch.dict(
         os.environ,
         {
-            "OMNI_AUTH_HEADER": "X-API-Key",
-            "OMNI_AUTH_SCHEME": "",
             "OMNI_TIMEOUT": "90",
             "OMNI_ISSUES_PATH": "payload.issues",
             "OMNI_FAIL_ON_NEW_ONLY": "true",
@@ -51,8 +49,6 @@ class ParseArgsTests(unittest.TestCase):
     )
     def test_parse_args_reads_env_backed_workflow_options(self):
         args = cli._parse_args([])
-        self.assertEqual(args.auth_header, "X-API-Key")
-        self.assertEqual(args.auth_scheme, "")
         self.assertEqual(args.timeout, 90)
         self.assertEqual(args.issues_path, "payload.issues")
         self.assertTrue(args.fail_on_new_only)

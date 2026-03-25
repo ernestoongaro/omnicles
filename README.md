@@ -57,7 +57,6 @@ Optional flags:
 - `--include-personal-folders` to include personal folders in the validation search.
 - `--issues-path` to point at the array of issues in the JSON response (dot path). By default, the CLI looks for `issues` arrays or the `content[].queries_and_issues[].issues` and `content[].dashboard_filter_issues` arrays.
 - `--fail-on-new-only` to fail only when new issues appear vs history.
-- `--auth-header` and `--auth-scheme` to override auth header formatting (defaults to `Authorization: Bearer <token>`).
 
 Environment variables:
 
@@ -68,8 +67,6 @@ Environment variables:
 - `OMNI_LABELS` (optional comma-separated label filter, for example `Verified,Sales`)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS`
 - `OMNI_ISSUES_PATH`
-- `OMNI_AUTH_HEADER` (optional override for nonstandard auth header names)
-- `OMNI_AUTH_SCHEME` (optional override for nonstandard auth schemes)
 - `OMNI_TIMEOUT` (optional request timeout in seconds)
 - `OMNI_FAIL_ON_NEW_ONLY` (optional `true`/`false`)
 - `OMNI_BRANCH_ID` (optional override if you already know the Omni branch UUID)
@@ -131,8 +128,6 @@ Configure these in GitHub:
 - `OMNI_USER_ID` (optional variable or secret)
 - `OMNI_LABELS` (optional variable or secret, comma-separated)
 - `OMNI_ISSUES_PATH` (optional variable or secret)
-- `OMNI_AUTH_HEADER` (optional variable or secret)
-- `OMNI_AUTH_SCHEME` (optional variable or secret)
 - `OMNI_TIMEOUT` (optional variable or secret)
 - `OMNI_FAIL_ON_NEW_ONLY` (optional variable or secret)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS` (optional variable or secret)
