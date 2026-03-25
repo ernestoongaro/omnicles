@@ -82,12 +82,37 @@ export OMNI_LABELS="Verified,Sales" # optional
 export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 ```
 
+## Secret Safety
+
+This repo now has two guardrails against accidentally committing keys:
+
+- A local `pre-commit` hook using the official `gitleaks` hook.
+- A GitHub Actions backstop in `.github/workflows/secret-scan.yml` that scans every push and pull request.
+
+Set up the local hook once per clone:
+
+```bash
+python3 -m pip install pre-commit
+pre-commit install
+```
+
+Run it manually across the repo at any time:
+
+```bash
+pre-commit run --all-files
+```
+
+Operationally, secrets should still live in environment variables or GitHub Actions secrets, never in tracked files. `.env` files and `.omni-content-validator/` artifacts are already ignored in `.gitignore`.
+
+For server-side blocking before a push lands, enable GitHub Secret Scanning and Push Protection in the repository settings. That setting is outside the repo, so it is not something this codebase can enforce by itself.
+
 ## GitHub Actions
 
 This repo includes live workflows for:
 
 - `.github/workflows/actionlint.yml`
 - `.github/workflows/release-please.yml`
+- `.github/workflows/secret-scan.yml`
 
 The content validator workflow is kept as an example in `.github/workflow-examples/content-validator.yml` so it does not run automatically in this repository. To enable it in your own repo, copy it to `.github/workflows/content-validator.yml`.
 
