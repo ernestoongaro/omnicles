@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 This file is managed by Release Please.
 
+## [0.3.0](https://github.com/ernestoongaro/omnicles/compare/0.2.1...0.3.0) (2026-03-25)
+
+
+### Features
+
+* enrich validator reports with content owners ([bde9d12](https://github.com/ernestoongaro/omnicles/commit/bde9d125f8670070e99bd77bacaefca2d44ac6cb))
+* support label-filtered validator results ([a09614b](https://github.com/ernestoongaro/omnicles/commit/a09614bdad1149bf560a53dc872c55e453886f47))
+* support label-filtered validator results ([ee95435](https://github.com/ernestoongaro/omnicles/commit/ee95435eafeb8e91fbec11a088abac3072deadc5))
+
 ## [0.2.1](https://github.com/ernestoongaro/omnicles/compare/0.2.0...0.2.1) (2026-03-23)
 
 
