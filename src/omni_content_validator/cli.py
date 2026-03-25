@@ -23,20 +23,6 @@ def _write_json(path: str, payload: Dict[str, Any]) -> None:
         handle.write("\n")
 
 
-def _extract_by_path(payload: Any, path: Optional[str]) -> Optional[List[Any]]:
-    if not path:
-        return None
-    current = payload
-    for part in path.split("."):
-        if isinstance(current, dict) and part in current:
-            current = current[part]
-        else:
-            return None
-    if isinstance(current, list):
-        return current
-    return None
-
-
 def _extract_label_names(record: Dict[str, Any]) -> Optional[List[str]]:
     labels = record.get("labels")
     if not isinstance(labels, list):
@@ -145,11 +131,7 @@ def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
     return issues
 
 
-def _extract_issues(payload: Any, issues_path: Optional[str]) -> List[Any]:
-    by_path = _extract_by_path(payload, issues_path)
-    if by_path is not None:
-        return by_path
-
+def _extract_issues(payload: Any) -> List[Any]:
     if isinstance(payload, list):
         return payload
 
@@ -283,7 +265,6 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--user-id", default=os.getenv("OMNI_USER_ID"))
     parser.add_argument("--branch-id", default=os.getenv("OMNI_BRANCH_ID"))
     parser.add_argument("--branch-name", default=os.getenv("OMNI_BRANCH_NAME"))
-    parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
     parser.add_argument(
         "--labels",
         action="append",
@@ -538,7 +519,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.raw_response_out:
         _write_json(args.raw_response_out, {"payload": payload})
 
-    issues = _extract_issues(payload, args.issues_path)
+    issues = _extract_issues(payload)
     normalized = _normalize_issues(issues)
 
     previous_payload = _load_json(args.history_in) or {}

@@ -43,14 +43,12 @@ class ParseArgsTests(unittest.TestCase):
         os.environ,
         {
             "OMNI_TIMEOUT": "90",
-            "OMNI_ISSUES_PATH": "payload.issues",
             "OMNI_FAIL_ON_NEW_ONLY": "true",
         },
     )
     def test_parse_args_reads_env_backed_workflow_options(self):
         args = cli._parse_args([])
         self.assertEqual(args.timeout, 90)
-        self.assertEqual(args.issues_path, "payload.issues")
         self.assertTrue(args.fail_on_new_only)
 
 
