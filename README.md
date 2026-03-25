@@ -82,6 +82,14 @@ export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 export OMNI_FAIL_ON_NEW_ONLY="true" # optional
 ```
 
+## Config Example
+
+For customer repos, the recommended long-term shape is a checked-in config file rather than pushing every non-secret knob into workflow YAML.
+
+This repo now includes a sample at `.omni-content-validator.example.yml`. A customer repo can copy that to `.omni-content-validator.yml` and keep only secrets such as `OMNI_API_KEY` in GitHub secrets.
+
+Today, the example workflow still uses `OMNI_*` environment variables directly. The sample config file is here to document the intended customer-facing configuration shape as we move toward a reusable workflow/config-based setup.
+
 ## Secret Safety
 
 This repo now has two guardrails against accidentally committing keys:
