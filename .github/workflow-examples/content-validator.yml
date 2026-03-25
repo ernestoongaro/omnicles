@@ -16,25 +16,20 @@ jobs:
   validate-content:
     runs-on: ubuntu-latest
     env:
-      # Recommended alongside this workflow:
-      # copy `.omni-content-validator.example.yml` to `.omni-content-validator.yml`
-      # and keep non-secret defaults there for reviewability.
-      #
-      # This example workflow still passes the currently supported settings
-      # through `OMNI_*` environment variables directly.
-      OMNI_BASE_URL: ${{ vars.OMNI_BASE_URL || secrets.OMNI_BASE_URL }}
-      OMNI_MODEL_ID: ${{ vars.OMNI_MODEL_ID || secrets.OMNI_MODEL_ID }}
+      # Keep non-secret settings in `.omni-content-validator.yml`.
+      # The CLI auto-loads that file from the repo root.
       OMNI_API_KEY: ${{ secrets.OMNI_API_KEY }}
-      OMNI_USER_ID: ${{ vars.OMNI_USER_ID || secrets.OMNI_USER_ID }}
-      OMNI_LABELS: ${{ vars.OMNI_LABELS || secrets.OMNI_LABELS }}
-      OMNI_BRANCH_ID: ${{ vars.OMNI_BRANCH_ID || secrets.OMNI_BRANCH_ID }}
-      OMNI_TIMEOUT: ${{ vars.OMNI_TIMEOUT || secrets.OMNI_TIMEOUT }}
-      OMNI_FAIL_ON_NEW_ONLY: ${{ vars.OMNI_FAIL_ON_NEW_ONLY || secrets.OMNI_FAIL_ON_NEW_ONLY }}
-      OMNI_INCLUDE_PERSONAL_FOLDERS: ${{ vars.OMNI_INCLUDE_PERSONAL_FOLDERS || secrets.OMNI_INCLUDE_PERSONAL_FOLDERS }}
-      OMNI_BRANCH_NAME: ${{ github.head_ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Check validator config
+        run: |
+          if [ ! -f .omni-content-validator.yml ]; then
+            echo "Missing .omni-content-validator.yml in the repo root."
+            echo "Copy .omni-content-validator.example.yml to get started."
+            exit 1
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v6
