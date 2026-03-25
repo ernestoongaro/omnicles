@@ -16,6 +16,12 @@ jobs:
   validate-content:
     runs-on: ubuntu-latest
     env:
+      # Recommended alongside this workflow:
+      # copy `.omni-content-validator.example.yml` to `.omni-content-validator.yml`
+      # and keep non-secret defaults there for reviewability.
+      #
+      # This example workflow still passes the currently supported settings
+      # through `OMNI_*` environment variables directly.
       OMNI_BASE_URL: ${{ vars.OMNI_BASE_URL || secrets.OMNI_BASE_URL }}
       OMNI_MODEL_ID: ${{ vars.OMNI_MODEL_ID || secrets.OMNI_MODEL_ID }}
       OMNI_API_KEY: ${{ secrets.OMNI_API_KEY }}
