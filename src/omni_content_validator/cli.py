@@ -287,8 +287,12 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--user-id", default=os.getenv("OMNI_USER_ID"))
     parser.add_argument("--branch-id", default=os.getenv("OMNI_BRANCH_ID"))
     parser.add_argument("--branch-name", default=os.getenv("OMNI_BRANCH_NAME"))
-    parser.add_argument("--auth-header", default="Authorization")
-    parser.add_argument("--auth-scheme", default="Bearer")
+    parser.add_argument(
+        "--auth-header", default=os.getenv("OMNI_AUTH_HEADER", "Authorization")
+    )
+    parser.add_argument(
+        "--auth-scheme", default=os.getenv("OMNI_AUTH_SCHEME", "Bearer")
+    )
     parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
     parser.add_argument(
         "--labels",
@@ -308,14 +312,15 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default=_env_flag("OMNI_INCLUDE_PERSONAL_FOLDERS"),
         help="Include personal folders in the validation search",
     )
-    parser.add_argument("--timeout", type=int, default=60)
+    parser.add_argument("--timeout", type=int, default=int(os.getenv("OMNI_TIMEOUT", "60")))
     parser.add_argument("--history-in", default=".omni-content-validator/history.json")
     parser.add_argument("--history-out", default=".omni-content-validator/history.json")
     parser.add_argument("--report-out", default=".omni-content-validator/report.json")
     parser.add_argument("--raw-response-out", default=None)
     parser.add_argument(
         "--fail-on-new-only",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=_env_flag("OMNI_FAIL_ON_NEW_ONLY"),
         help="Only fail when there are new issues compared to history",
     )
     args = parser.parse_args(argv)

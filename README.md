@@ -68,6 +68,10 @@ Environment variables:
 - `OMNI_LABELS` (optional comma-separated label filter, for example `Verified,Sales`)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS`
 - `OMNI_ISSUES_PATH`
+- `OMNI_AUTH_HEADER` (optional override for nonstandard auth header names)
+- `OMNI_AUTH_SCHEME` (optional override for nonstandard auth schemes)
+- `OMNI_TIMEOUT` (optional request timeout in seconds)
+- `OMNI_FAIL_ON_NEW_ONLY` (optional `true`/`false`)
 - `OMNI_BRANCH_ID` (optional override if you already know the Omni branch UUID)
 - `OMNI_BRANCH_NAME` (used to resolve the Omni branch UUID by name)
 
@@ -80,6 +84,7 @@ export OMNI_API_KEY="..."
 export OMNI_USER_ID="..." # optional
 export OMNI_LABELS="Verified,Sales" # optional
 export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
+export OMNI_FAIL_ON_NEW_ONLY="true" # optional
 ```
 
 ## Secret Safety
@@ -124,6 +129,12 @@ Configure these in GitHub:
 - `OMNI_BASE_URL` (variable or secret)
 - `OMNI_MODEL_ID` (variable or secret)
 - `OMNI_USER_ID` (optional variable or secret)
+- `OMNI_LABELS` (optional variable or secret, comma-separated)
+- `OMNI_ISSUES_PATH` (optional variable or secret)
+- `OMNI_AUTH_HEADER` (optional variable or secret)
+- `OMNI_AUTH_SCHEME` (optional variable or secret)
+- `OMNI_TIMEOUT` (optional variable or secret)
+- `OMNI_FAIL_ON_NEW_ONLY` (optional variable or secret)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS` (optional variable or secret)
 
 ### Testing the workflow
