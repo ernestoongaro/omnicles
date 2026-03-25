@@ -40,8 +40,29 @@ class ParseArgsTests(unittest.TestCase):
         self.assertEqual(args.labels, ["Verified", "Sales", "Finance"])
 
 
+class IssueIdentityTests(unittest.TestCase):
+    def test_issue_identity_ignores_owner_and_labels_metadata(self):
+        base_issue = {
+            "message": "Broken field",
+            "document_id": "1",
+            "document_identifier": "dash-1",
+            "document_name": "Revenue Dashboard",
+            "issue_type": "query",
+        }
+
+        enriched_issue = {
+            **base_issue,
+            "document_labels": ["Verified"],
+            "document_owner": {"id": "membership-1", "name": "Alice"},
+        }
+
+        self.assertEqual(
+            cli._issue_identity(base_issue), cli._issue_identity(enriched_issue)
+        )
+
+
 class LabelFilteringTests(unittest.TestCase):
-    def test_fetch_content_identifiers_for_labels_paginates(self):
+    def test_fetch_content_records_paginates(self):
         args = argparse.Namespace(
             base_url="https://omni.example",
             api_key="secret",
@@ -70,9 +91,12 @@ class LabelFilteringTests(unittest.TestCase):
         ]
 
         with mock.patch.object(cli.requests, "get", side_effect=responses) as get:
-            identifiers = cli._fetch_content_identifiers_for_labels(args)
+            records = cli._fetch_content_records(args)
 
-        self.assertEqual(identifiers, {"doc-1", "doc-2", "doc-3"})
+        self.assertEqual(
+            [record["identifier"] for record in records],
+            ["doc-1", "doc-2", "doc-2", "doc-3"],
+        )
         self.assertEqual(get.call_count, 2)
         self.assertEqual(
             get.call_args_list[0].args[0], "https://omni.example/api/v1/content"
@@ -99,6 +123,30 @@ class LabelFilteringTests(unittest.TestCase):
             },
         )
 
+    def test_enrich_validator_payload_adds_owner_and_labels(self):
+        payload = {
+            "content": [
+                {"identifier": "doc-1", "name": "Alpha"},
+                {"identifier": "doc-2", "name": "Beta"},
+            ]
+        }
+        content_records_by_identifier = {
+            "doc-2": {
+                "identifier": "doc-2",
+                "owner": {"id": "membership-1", "name": "Alice"},
+                "labels": [{"name": "Verified"}],
+            }
+        }
+
+        enriched = cli._enrich_validator_payload(payload, content_records_by_identifier)
+
+        self.assertEqual(
+            enriched["content"][1]["owner"],
+            {"id": "membership-1", "name": "Alice"},
+        )
+        self.assertEqual(enriched["content"][1]["labels"], [{"name": "Verified"}])
+        self.assertNotIn("owner", payload["content"][1])
+
     def test_filter_validator_payload_filters_content_by_identifier(self):
         payload = {
             "content": [
@@ -114,7 +162,7 @@ class LabelFilteringTests(unittest.TestCase):
         self.assertEqual(filtered["meta"], {"page": 1})
         self.assertEqual(len(payload["content"]), 2)
 
-    def test_collect_content_issues_includes_document_identifier_and_labels(self):
+    def test_collect_content_issues_includes_document_identifier_labels_and_owner(self):
         payload = {
             "content": [
                 {
@@ -125,6 +173,7 @@ class LabelFilteringTests(unittest.TestCase):
                     "url": "https://omni.example/documents/1",
                     "folder": {"name": "Finance", "path": "/Finance"},
                     "labels": [{"name": "Verified"}],
+                    "owner": {"id": "membership-1", "name": "Alice"},
                     "queries_and_issues": [
                         {
                             "query_name": "Revenue by Month",
@@ -141,18 +190,21 @@ class LabelFilteringTests(unittest.TestCase):
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["document_identifier"], "dash-1")
         self.assertEqual(issues[0]["document_labels"], ["Verified"])
+        self.assertEqual(
+            issues[0]["document_owner"], {"id": "membership-1", "name": "Alice"}
+        )
 
 
 class MainFlowTests(unittest.TestCase):
     @mock.patch.object(cli, "_write_json")
-    @mock.patch.object(cli, "_fetch_content_identifiers_for_labels")
+    @mock.patch.object(cli, "_fetch_content_records")
     @mock.patch.object(cli, "_fetch_validator_payload")
     @mock.patch.object(cli, "_load_json")
     def test_main_filters_results_and_resets_history_when_labels_change(
         self,
         load_json,
         fetch_validator_payload,
-        fetch_content_identifiers_for_labels,
+        fetch_content_records,
         write_json,
     ):
         fetch_validator_payload.return_value = {
@@ -175,7 +227,13 @@ class MainFlowTests(unittest.TestCase):
                 },
             ]
         }
-        fetch_content_identifiers_for_labels.return_value = {"dash-2"}
+        fetch_content_records.return_value = [
+            {
+                "identifier": "dash-2",
+                "owner": {"id": "membership-1", "name": "Alice"},
+                "labels": [{"name": "Verified"}],
+            }
+        ]
         load_json.return_value = {
             "labels": [],
             "issues": [{"id": "stale", "summary": "stale", "raw": {}}],
@@ -205,7 +263,63 @@ class MainFlowTests(unittest.TestCase):
         self.assertEqual(report["existing_issues"], 0)
         self.assertEqual(report["resolved_issues"], 0)
         self.assertEqual(history["labels"], ["Verified"])
+        self.assertEqual(
+            report["issues"][0]["raw"]["document_owner"],
+            {"id": "membership-1", "name": "Alice"},
+        )
+        self.assertEqual(report["issues"][0]["raw"]["document_labels"], ["Verified"])
         self.assertIn("History labels changed", stdout.getvalue())
+
+    @mock.patch.object(cli, "_write_json")
+    @mock.patch.object(cli, "_fetch_content_records")
+    @mock.patch.object(cli, "_fetch_validator_payload")
+    @mock.patch.object(cli, "_load_json")
+    def test_main_enriches_owner_without_labels(
+        self,
+        load_json,
+        fetch_validator_payload,
+        fetch_content_records,
+        write_json,
+    ):
+        fetch_validator_payload.return_value = {
+            "content": [
+                {
+                    "document_id": "2",
+                    "identifier": "dash-2",
+                    "name": "Revenue Dashboard",
+                    "queries_and_issues": [
+                        {"query_name": "Q2", "issues": [{"message": "Current issue"}]}
+                    ],
+                }
+            ]
+        }
+        fetch_content_records.return_value = [
+            {
+                "identifier": "dash-2",
+                "owner": {"id": "membership-2", "name": "Bob"},
+            }
+        ]
+        load_json.return_value = {"labels": [], "issues": []}
+
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            exit_code = cli.main(
+                [
+                    "--base-url",
+                    "https://omni.example",
+                    "--model-id",
+                    "model-1",
+                    "--api-key",
+                    "secret",
+                ]
+            )
+
+        self.assertEqual(exit_code, 1)
+        report = write_json.call_args_list[0].args[1]
+        self.assertEqual(
+            report["issues"][0]["raw"]["document_owner"],
+            {"id": "membership-2", "name": "Bob"},
+        )
 
 
 if __name__ == "__main__":

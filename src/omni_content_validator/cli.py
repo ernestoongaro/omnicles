@@ -56,6 +56,25 @@ def _extract_label_names(record: Dict[str, Any]) -> Optional[List[str]]:
     return names
 
 
+def _extract_owner(record: Dict[str, Any]) -> Optional[Dict[str, str]]:
+    owner = record.get("owner")
+    if not isinstance(owner, dict):
+        return None
+
+    normalized_owner = {}
+    owner_id = owner.get("id")
+    if isinstance(owner_id, str) and owner_id.strip():
+        normalized_owner["id"] = owner_id.strip()
+
+    owner_name = owner.get("name")
+    if isinstance(owner_name, str) and owner_name.strip():
+        normalized_owner["name"] = owner_name.strip()
+
+    if not normalized_owner:
+        return None
+    return normalized_owner
+
+
 def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
     issues: List[Any] = []
     content = payload.get("content")
@@ -80,6 +99,7 @@ def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
             if isinstance(document.get("folder"), dict)
             else None,
             "document_labels": _extract_label_names(document),
+            "document_owner": _extract_owner(document),
         }
         dashboard_issues = document.get("dashboard_filter_issues")
         if isinstance(dashboard_issues, list):
@@ -157,7 +177,14 @@ def _issue_identity(issue: Any) -> str:
         value = issue
     else:
         try:
-            value = json.dumps(issue, sort_keys=True, separators=(",", ":"))
+            comparable_issue = issue
+            if isinstance(issue, dict):
+                comparable_issue = dict(issue)
+                comparable_issue.pop("document_labels", None)
+                comparable_issue.pop("document_owner", None)
+            value = json.dumps(
+                comparable_issue, sort_keys=True, separators=(",", ":")
+            )
         except TypeError:
             value = str(issue)
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
@@ -335,17 +362,17 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
     return payload
 
 
-def _fetch_content_identifiers_for_labels(args: argparse.Namespace) -> Set[str]:
+def _fetch_content_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
     headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
     url = f"{args.base_url.rstrip('/')}/api/v1/content"
-    identifiers: Set[str] = set()
+    records: List[Dict[str, Any]] = []
     cursor = None
 
     while True:
-        params = {
-            "include": "labels",
-            "labels": ",".join(args.labels),
-        }
+        params = {}
+        if args.labels:
+            params["include"] = "labels"
+            params["labels"] = ",".join(args.labels)
         if cursor:
             params["cursor"] = cursor
         if args.user_id:
@@ -366,18 +393,27 @@ def _fetch_content_identifiers_for_labels(args: argparse.Namespace) -> Set[str]:
         except ValueError as exc:
             raise SystemExit(f"Content lookup did not return JSON: {exc}") from exc
 
-        records = payload.get("records", [])
-        if isinstance(records, list):
-            for record in records:
+        page_records = payload.get("records", [])
+        if isinstance(page_records, list):
+            for record in page_records:
                 if not isinstance(record, dict):
                     continue
-                identifier = record.get("identifier")
-                if isinstance(identifier, str) and identifier.strip():
-                    identifiers.add(identifier)
+                records.append(record)
 
         cursor = payload.get("pageInfo", {}).get("nextCursor")
         if not cursor:
-            return identifiers
+            return records
+
+
+def _index_content_records(
+    records: Iterable[Dict[str, Any]]
+) -> Dict[str, Dict[str, Any]]:
+    indexed_records = {}
+    for record in records:
+        identifier = record.get("identifier")
+        if isinstance(identifier, str) and identifier.strip():
+            indexed_records[identifier] = record
+    return indexed_records
 
 
 def _filter_validator_payload(
@@ -399,6 +435,46 @@ def _filter_validator_payload(
         and document.get("identifier") in allowed_identifiers
     ]
     return filtered_payload
+
+
+def _enrich_validator_payload(
+    payload: Any, content_records_by_identifier: Dict[str, Dict[str, Any]]
+) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return payload
+
+    enriched_payload = dict(payload)
+    enriched_content = []
+    for document in content:
+        if not isinstance(document, dict):
+            enriched_content.append(document)
+            continue
+
+        enriched_document = dict(document)
+        identifier = enriched_document.get("identifier")
+        content_record = None
+        if isinstance(identifier, str):
+            content_record = content_records_by_identifier.get(identifier)
+
+        if isinstance(content_record, dict):
+            owner = _extract_owner(content_record)
+            if owner is not None and not isinstance(enriched_document.get("owner"), dict):
+                enriched_document["owner"] = owner
+
+            labels = content_record.get("labels")
+            if isinstance(labels, list) and not isinstance(
+                enriched_document.get("labels"), list
+            ):
+                enriched_document["labels"] = labels
+
+        enriched_content.append(enriched_document)
+
+    enriched_payload["content"] = enriched_content
+    return enriched_payload
 
 
 def _resolve_branch_id(args: argparse.Namespace) -> Optional[str]:
@@ -449,14 +525,21 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"No matching Omni branch found for '{args.branch_name}', using default")
 
     payload = _fetch_validator_payload(args)
-    if args.labels:
-        allowed_identifiers = _fetch_content_identifiers_for_labels(args)
-        payload = _filter_validator_payload(payload, allowed_identifiers)
-        print(
-            "Filtered validator payload by labels "
-            f"{', '.join(args.labels)} "
-            f"to {len(payload.get('content', [])) if isinstance(payload, dict) else 0} document(s)"
-        )
+    content_records_by_identifier = {}
+    if isinstance(payload, dict) and isinstance(payload.get("content"), list):
+        content_records = _fetch_content_records(args)
+        content_records_by_identifier = _index_content_records(content_records)
+
+        if args.labels:
+            allowed_identifiers = set(content_records_by_identifier)
+            payload = _filter_validator_payload(payload, allowed_identifiers)
+            print(
+                "Filtered validator payload by labels "
+                f"{', '.join(args.labels)} "
+                f"to {len(payload.get('content', [])) if isinstance(payload, dict) else 0} document(s)"
+            )
+
+        payload = _enrich_validator_payload(payload, content_records_by_identifier)
     if args.raw_response_out:
         _write_json(args.raw_response_out, {"payload": payload})
 

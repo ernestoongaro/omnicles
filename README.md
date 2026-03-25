@@ -119,7 +119,9 @@ Releases are managed in this repo by `.github/workflows/release-please.yml`.
 
 The content validator endpoint currently validates all content and does not support filters server-side.
 
-When you pass `--labels` or `OMNI_LABELS`, this CLI first fetches matching content from `/api/v1/content?include=labels` and then filters the validator payload locally before extracting issues. That keeps reports and history scoped to the labeled subset, but Omni still validates the full model underneath.
+This CLI also fetches content metadata from `/api/v1/content` to enrich issue records with document ownership information. Reports now include `document_owner` when Omni returns an owner object for the matched content.
+
+When you pass `--labels` or `OMNI_LABELS`, the same content API lookup is reused to filter the validator payload locally before extracting issues. That keeps reports and history scoped to the labeled subset, but Omni still validates the full model underneath.
 
 Without label filtering, the PR report may include unrelated failures. The example workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
 
