@@ -3,8 +3,7 @@ import datetime
 import hashlib
 import json
 import os
-import sys
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import requests
 
@@ -38,6 +37,25 @@ def _extract_by_path(payload: Any, path: Optional[str]) -> Optional[List[Any]]:
     return None
 
 
+def _extract_label_names(record: Dict[str, Any]) -> Optional[List[str]]:
+    labels = record.get("labels")
+    if not isinstance(labels, list):
+        return None
+
+    names = []
+    for item in labels:
+        if isinstance(item, dict):
+            value = item.get("name")
+        else:
+            value = item
+        if isinstance(value, str) and value.strip():
+            names.append(value.strip())
+
+    if not names:
+        return None
+    return names
+
+
 def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
     issues: List[Any] = []
     content = payload.get("content")
@@ -49,6 +67,7 @@ def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
             continue
         doc_context = {
             "document_id": document.get("document_id"),
+            "document_identifier": document.get("identifier"),
             "document_name": document.get("name"),
             "document_type": document.get("type"),
             "document_url": document.get("url")
@@ -60,6 +79,7 @@ def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
             "folder_path": document.get("folder", {}).get("path")
             if isinstance(document.get("folder"), dict)
             else None,
+            "document_labels": _extract_label_names(document),
         }
         dashboard_issues = document.get("dashboard_filter_issues")
         if isinstance(dashboard_issues, list):
@@ -210,6 +230,26 @@ def _env_flag(name: str) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _split_csv_values(values: Iterable[Optional[str]]) -> List[str]:
+    names = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        for item in value.split(","):
+            name = item.strip()
+            if name:
+                names.append(name)
+    return list(dict.fromkeys(names))
+
+
+def _normalize_history_labels(value: Any) -> List[str]:
+    if isinstance(value, list):
+        return _split_csv_values(value)
+    if isinstance(value, str):
+        return _split_csv_values([value])
+    return []
+
+
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run Omni content validator and track history",
@@ -223,6 +263,18 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument("--auth-header", default="Authorization")
     parser.add_argument("--auth-scheme", default="Bearer")
     parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
+    parser.add_argument(
+        "--labels",
+        action="append",
+        default=[],
+        help="Comma-separated label names to filter validation results by",
+    )
+    parser.add_argument(
+        "--label",
+        action="append",
+        default=[],
+        help="Repeatable label name to filter validation results by",
+    )
     parser.add_argument(
         "--include-personal-folders",
         action=argparse.BooleanOptionalAction,
@@ -239,7 +291,13 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Only fail when there are new issues compared to history",
     )
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    cli_labels = _split_csv_values([*args.labels, *args.label])
+    env_labels = _split_csv_values([os.getenv("OMNI_LABELS")])
+    args.labels = cli_labels or env_labels
+    delattr(args, "label")
+    return args
 
 
 def _validate_args(args: argparse.Namespace) -> None:
@@ -275,6 +333,72 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
         raise SystemExit(f"Content validator did not return JSON: {exc}") from exc
 
     return payload
+
+
+def _fetch_content_identifiers_for_labels(args: argparse.Namespace) -> Set[str]:
+    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    url = f"{args.base_url.rstrip('/')}/api/v1/content"
+    identifiers: Set[str] = set()
+    cursor = None
+
+    while True:
+        params = {
+            "include": "labels",
+            "labels": ",".join(args.labels),
+        }
+        if cursor:
+            params["cursor"] = cursor
+        if args.user_id:
+            params["userId"] = args.user_id
+        if args.branch_id:
+            params["branch_id"] = args.branch_id
+        if args.include_personal_folders:
+            params["include_personal_folders"] = "true"
+
+        response = requests.get(url, headers=headers, params=params, timeout=args.timeout)
+        if not response.ok:
+            raise SystemExit(
+                f"Content lookup failed: {response.status_code} {response.text}"
+            )
+
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise SystemExit(f"Content lookup did not return JSON: {exc}") from exc
+
+        records = payload.get("records", [])
+        if isinstance(records, list):
+            for record in records:
+                if not isinstance(record, dict):
+                    continue
+                identifier = record.get("identifier")
+                if isinstance(identifier, str) and identifier.strip():
+                    identifiers.add(identifier)
+
+        cursor = payload.get("pageInfo", {}).get("nextCursor")
+        if not cursor:
+            return identifiers
+
+
+def _filter_validator_payload(
+    payload: Any, allowed_identifiers: Set[str]
+) -> Any:
+    if not isinstance(payload, dict):
+        return payload
+
+    content = payload.get("content")
+    if not isinstance(content, list):
+        return payload
+
+    filtered_payload = dict(payload)
+    filtered_payload["content"] = [
+        document
+        for document in content
+        if isinstance(document, dict)
+        and isinstance(document.get("identifier"), str)
+        and document.get("identifier") in allowed_identifiers
+    ]
+    return filtered_payload
 
 
 def _resolve_branch_id(args: argparse.Namespace) -> Optional[str]:
@@ -325,6 +449,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"No matching Omni branch found for '{args.branch_name}', using default")
 
     payload = _fetch_validator_payload(args)
+    if args.labels:
+        allowed_identifiers = _fetch_content_identifiers_for_labels(args)
+        payload = _filter_validator_payload(payload, allowed_identifiers)
+        print(
+            "Filtered validator payload by labels "
+            f"{', '.join(args.labels)} "
+            f"to {len(payload.get('content', [])) if isinstance(payload, dict) else 0} document(s)"
+        )
     if args.raw_response_out:
         _write_json(args.raw_response_out, {"payload": payload})
 
@@ -332,7 +464,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     normalized = _normalize_issues(issues)
 
     previous_payload = _load_json(args.history_in) or {}
-    previous_issues = previous_payload.get("issues", [])
+    previous_labels = _normalize_history_labels(previous_payload.get("labels"))
+    if previous_labels != args.labels:
+        if previous_payload:
+            print("History labels changed; ignoring previous issues for comparison")
+        previous_issues = []
+    else:
+        previous_issues = previous_payload.get("issues", [])
 
     new_items, existing_items, resolved_items = _partition_issues(
         normalized, previous_issues
@@ -342,6 +480,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
         "base_url": args.base_url,
         "model_id": args.model_id,
+        "labels": args.labels,
         "include_personal_folders": args.include_personal_folders,
         "total_issues": len(normalized),
         "new_issues": len(new_items),
@@ -360,6 +499,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "generated_at": report["generated_at"],
             "base_url": args.base_url,
             "model_id": args.model_id,
+            "labels": args.labels,
             "include_personal_folders": args.include_personal_folders,
             "issues": normalized,
         },

@@ -26,11 +26,34 @@ omni-content-validator \
   --branch-name <BRANCH_NAME>
 ```
 
+Validate only labeled content:
+
+```bash
+omni-content-validator \
+  --base-url https://ernesto.playground.exploreomni.dev \
+  --model-id <MODEL_ID> \
+  --api-key <API_KEY> \
+  --labels Verified
+```
+
+Or use repeated label flags:
+
+```bash
+omni-content-validator \
+  --base-url https://ernesto.playground.exploreomni.dev \
+  --model-id <MODEL_ID> \
+  --api-key <API_KEY> \
+  --label Verified \
+  --label Sales
+```
+
 Optional flags:
 
 - `--user-id` to act on behalf of a user for org API keys.
 - `--branch-name` to resolve and validate against an Omni branch with the same name.
 - `--branch-id` to validate against a specific Omni branch UUID.
+- `--labels` to filter validation results by one or more Omni labels (comma-separated, for example `--labels Verified,Sales`).
+- `--label` as a repeatable form of the same filter (for example `--label Verified --label Sales`).
 - `--include-personal-folders` to include personal folders in the validation search.
 - `--issues-path` to point at the array of issues in the JSON response (dot path). By default, the CLI looks for `issues` arrays or the `content[].queries_and_issues[].issues` and `content[].dashboard_filter_issues` arrays.
 - `--fail-on-new-only` to fail only when new issues appear vs history.
@@ -42,6 +65,7 @@ Environment variables:
 - `OMNI_MODEL_ID`
 - `OMNI_API_KEY`
 - `OMNI_USER_ID`
+- `OMNI_LABELS` (optional comma-separated label filter, for example `Verified,Sales`)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS`
 - `OMNI_ISSUES_PATH`
 - `OMNI_BRANCH_ID` (optional override if you already know the Omni branch UUID)
@@ -54,6 +78,7 @@ export OMNI_BASE_URL="https://ernesto.playground.exploreomni.dev"
 export OMNI_MODEL_ID="..."
 export OMNI_API_KEY="..."
 export OMNI_USER_ID="..." # optional
+export OMNI_LABELS="Verified,Sales" # optional
 export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
 ```
 
@@ -92,7 +117,11 @@ Releases are managed in this repo by `.github/workflows/release-please.yml`.
 
 ## Limitations
 
-The content validator endpoint currently validates all content and does not support filters. That means the PR report may include unrelated failures. The example workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
+The content validator endpoint currently validates all content and does not support filters server-side.
+
+When you pass `--labels` or `OMNI_LABELS`, this CLI first fetches matching content from `/api/v1/content?include=labels` and then filters the validator payload locally before extracting issues. That keeps reports and history scoped to the labeled subset, but Omni still validates the full model underneath.
+
+Without label filtering, the PR report may include unrelated failures. The example workflow keeps a history artifact and highlights which issues are new vs previously seen to reduce noise.
 
 ## Disclaimer
 
