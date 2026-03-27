@@ -3,9 +3,24 @@ import datetime
 import hashlib
 import json
 import os
+import re
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 import requests
+
+
+CONFIG_PATH = ".omni-content-validator.yml"
+CONFIG_KEYS = {
+    "base_url",
+    "model_id",
+    "user_id",
+    "branch_id",
+    "branch_name",
+    "labels",
+    "include_personal_folders",
+    "timeout",
+    "fail_on_new_only",
+}
 
 
 def _load_json(path: str) -> Optional[Dict[str, Any]]:
@@ -23,18 +38,52 @@ def _write_json(path: str, payload: Dict[str, Any]) -> None:
         handle.write("\n")
 
 
-def _extract_by_path(payload: Any, path: Optional[str]) -> Optional[List[Any]]:
-    if not path:
-        return None
-    current = payload
-    for part in path.split("."):
-        if isinstance(current, dict) and part in current:
-            current = current[part]
-        else:
-            return None
-    if isinstance(current, list):
-        return current
-    return None
+def _expand_env_string(value: str) -> str:
+    return re.sub(
+        r"\$(\w+)|\$\{([^}]+)\}",
+        lambda match: os.getenv(match.group(1) or match.group(2), ""),
+        value,
+    )
+
+
+def _expand_env_vars(value: Any) -> Any:
+    if isinstance(value, str):
+        return _expand_env_string(value)
+    if isinstance(value, list):
+        return [_expand_env_vars(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _expand_env_vars(item) for key, item in value.items()}
+    return value
+
+
+def _load_config(path: str = CONFIG_PATH) -> Dict[str, Any]:
+    if not os.path.exists(path):
+        return {}
+
+    try:
+        import yaml
+    except ImportError as exc:
+        raise SystemExit(
+            "Config file support requires PyYAML. Install it with "
+            "`python3 -m pip install PyYAML`."
+        ) from exc
+
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = yaml.safe_load(handle) or {}
+    except yaml.YAMLError as exc:
+        raise SystemExit(f"Could not parse config file '{path}': {exc}") from exc
+
+    if not isinstance(payload, dict):
+        raise SystemExit(f"Config file '{path}' must contain a top-level mapping")
+
+    unknown_keys = sorted(set(payload) - CONFIG_KEYS)
+    if unknown_keys:
+        raise SystemExit(
+            f"Unsupported keys in config file '{path}': {', '.join(unknown_keys)}"
+        )
+
+    return _expand_env_vars(payload)
 
 
 def _extract_label_names(record: Dict[str, Any]) -> Optional[List[str]]:
@@ -145,11 +194,7 @@ def _collect_content_issues(payload: Dict[str, Any]) -> List[Any]:
     return issues
 
 
-def _extract_issues(payload: Any, issues_path: Optional[str]) -> List[Any]:
-    by_path = _extract_by_path(payload, issues_path)
-    if by_path is not None:
-        return by_path
-
+def _extract_issues(payload: Any) -> List[Any]:
     if isinstance(payload, list):
         return payload
 
@@ -242,19 +287,49 @@ def _partition_issues(
     return new_items, existing_items, resolved_items
 
 
-def _build_headers(api_key: str, auth_header: str, auth_scheme: str) -> Dict[str, str]:
-    if auth_scheme:
-        token_value = f"{auth_scheme} {api_key}".strip()
-    else:
-        token_value = api_key
-    return {auth_header: token_value}
+def _build_headers(api_key: str) -> Dict[str, str]:
+    return {"Authorization": f"Bearer {api_key}"}
 
 
-def _env_flag(name: str) -> bool:
-    value = os.getenv(name)
+def _parse_bool_value(name: str, value: Any) -> Optional[bool]:
     if value is None:
-        return False
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise SystemExit(f"Invalid boolean value for {name}: {value!r}")
+
+
+def _parse_int_value(name: str, value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        try:
+            return int(normalized)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid integer value for {name}: {value!r}") from exc
+    raise SystemExit(f"Invalid integer value for {name}: {value!r}")
+
+
+def _normalize_string_value(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise SystemExit(f"Expected a string value, got {type(value).__name__}")
+    normalized = value.strip()
+    return normalized or None
 
 
 def _split_csv_values(values: Iterable[Optional[str]]) -> List[str]:
@@ -277,52 +352,165 @@ def _normalize_history_labels(value: Any) -> List[str]:
     return []
 
 
+def _resolve_string_option(
+    cli_value: Optional[str],
+    env_name: str,
+    config: Dict[str, Any],
+    config_key: str,
+) -> Optional[str]:
+    if cli_value is not None:
+        return _normalize_string_value(cli_value)
+    env_value = os.getenv(env_name)
+    if env_value is not None:
+        return _normalize_string_value(env_value)
+    return _normalize_string_value(config.get(config_key))
+
+
+def _resolve_bool_option(
+    cli_value: Optional[bool],
+    env_name: str,
+    config: Dict[str, Any],
+    config_key: str,
+    default: bool,
+) -> bool:
+    if cli_value is not None:
+        return cli_value
+    env_value = os.getenv(env_name)
+    if env_value is not None:
+        parsed = _parse_bool_value(env_name, env_value)
+        return default if parsed is None else parsed
+    parsed = _parse_bool_value(config_key, config.get(config_key))
+    return default if parsed is None else parsed
+
+
+def _resolve_int_option(
+    cli_value: Optional[int],
+    env_name: str,
+    config: Dict[str, Any],
+    config_key: str,
+    default: int,
+) -> int:
+    if cli_value is not None:
+        return cli_value
+    env_value = os.getenv(env_name)
+    if env_value is not None:
+        parsed = _parse_int_value(env_name, env_value)
+        return default if parsed is None else parsed
+    parsed = _parse_int_value(config_key, config.get(config_key))
+    return default if parsed is None else parsed
+
+
+def _resolve_labels_option(
+    cli_values: Optional[List[str]],
+    env_name: str,
+    config: Dict[str, Any],
+    config_key: str,
+) -> List[str]:
+    cli_labels = _split_csv_values(cli_values or [])
+    if cli_labels:
+        return cli_labels
+
+    env_value = os.getenv(env_name)
+    env_labels = _split_csv_values([env_value])
+    if env_labels:
+        return env_labels
+
+    config_value = config.get(config_key)
+    if isinstance(config_value, list):
+        for item in config_value:
+            if not isinstance(item, str):
+                raise SystemExit(
+                    f"Invalid label value in config key '{config_key}': {item!r}"
+                )
+        return _split_csv_values(config_value)
+    if isinstance(config_value, str):
+        return _split_csv_values([config_value])
+    if config_value is None:
+        return []
+    raise SystemExit(
+        f"Config key '{config_key}' must be a string or list of strings"
+    )
+
+
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run Omni content validator and track history",
     )
-    parser.add_argument("--base-url", default=os.getenv("OMNI_BASE_URL"))
-    parser.add_argument("--model-id", default=os.getenv("OMNI_MODEL_ID"))
-    parser.add_argument("--api-key", default=os.getenv("OMNI_API_KEY"))
-    parser.add_argument("--user-id", default=os.getenv("OMNI_USER_ID"))
-    parser.add_argument("--branch-id", default=os.getenv("OMNI_BRANCH_ID"))
-    parser.add_argument("--branch-name", default=os.getenv("OMNI_BRANCH_NAME"))
-    parser.add_argument("--auth-header", default="Authorization")
-    parser.add_argument("--auth-scheme", default="Bearer")
-    parser.add_argument("--issues-path", default=os.getenv("OMNI_ISSUES_PATH"))
+    parser.add_argument("--base-url")
+    parser.add_argument("--model-id")
+    parser.add_argument("--api-key")
+    parser.add_argument("--user-id")
+    parser.add_argument("--branch-id")
+    parser.add_argument("--branch-name")
     parser.add_argument(
         "--labels",
         action="append",
-        default=[],
+        default=None,
         help="Comma-separated label names to filter validation results by",
     )
     parser.add_argument(
         "--label",
         action="append",
-        default=[],
+        default=None,
         help="Repeatable label name to filter validation results by",
     )
     parser.add_argument(
         "--include-personal-folders",
         action=argparse.BooleanOptionalAction,
-        default=_env_flag("OMNI_INCLUDE_PERSONAL_FOLDERS"),
+        default=None,
         help="Include personal folders in the validation search",
     )
-    parser.add_argument("--timeout", type=int, default=60)
+    parser.add_argument("--timeout", type=int)
     parser.add_argument("--history-in", default=".omni-content-validator/history.json")
     parser.add_argument("--history-out", default=".omni-content-validator/history.json")
     parser.add_argument("--report-out", default=".omni-content-validator/report.json")
     parser.add_argument("--raw-response-out", default=None)
     parser.add_argument(
         "--fail-on-new-only",
-        action="store_true",
+        action=argparse.BooleanOptionalAction,
+        default=None,
         help="Only fail when there are new issues compared to history",
     )
     args = parser.parse_args(argv)
 
-    cli_labels = _split_csv_values([*args.labels, *args.label])
-    env_labels = _split_csv_values([os.getenv("OMNI_LABELS")])
-    args.labels = cli_labels or env_labels
+    config = _load_config()
+
+    args.base_url = _resolve_string_option(
+        args.base_url, "OMNI_BASE_URL", config, "base_url"
+    )
+    args.model_id = _resolve_string_option(
+        args.model_id, "OMNI_MODEL_ID", config, "model_id"
+    )
+    args.api_key = _normalize_string_value(args.api_key or os.getenv("OMNI_API_KEY"))
+    args.user_id = _resolve_string_option(
+        args.user_id, "OMNI_USER_ID", config, "user_id"
+    )
+    args.branch_id = _resolve_string_option(
+        args.branch_id, "OMNI_BRANCH_ID", config, "branch_id"
+    )
+    args.branch_name = _resolve_string_option(
+        args.branch_name, "OMNI_BRANCH_NAME", config, "branch_name"
+    )
+    args.labels = _resolve_labels_option(
+        [*(args.labels or []), *(args.label or [])], "OMNI_LABELS", config, "labels"
+    )
+    args.include_personal_folders = _resolve_bool_option(
+        args.include_personal_folders,
+        "OMNI_INCLUDE_PERSONAL_FOLDERS",
+        config,
+        "include_personal_folders",
+        default=False,
+    )
+    args.timeout = _resolve_int_option(
+        args.timeout, "OMNI_TIMEOUT", config, "timeout", default=60
+    )
+    args.fail_on_new_only = _resolve_bool_option(
+        args.fail_on_new_only,
+        "OMNI_FAIL_ON_NEW_ONLY",
+        config,
+        "fail_on_new_only",
+        default=False,
+    )
     delattr(args, "label")
     return args
 
@@ -330,9 +518,15 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 def _validate_args(args: argparse.Namespace) -> None:
     missing = []
     if not args.base_url:
-        missing.append("--base-url or OMNI_BASE_URL")
+        missing.append(
+            "--base-url, OMNI_BASE_URL, or "
+            f"{CONFIG_PATH} `base_url`"
+        )
     if not args.model_id:
-        missing.append("--model-id or OMNI_MODEL_ID")
+        missing.append(
+            "--model-id, OMNI_MODEL_ID, or "
+            f"{CONFIG_PATH} `model_id`"
+        )
     if not args.api_key:
         missing.append("--api-key or OMNI_API_KEY")
     if missing:
@@ -341,7 +535,7 @@ def _validate_args(args: argparse.Namespace) -> None:
 
 def _fetch_validator_payload(args: argparse.Namespace) -> Any:
     url = f"{args.base_url.rstrip('/')}/api/v1/models/{args.model_id}/content-validator"
-    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    headers = _build_headers(args.api_key)
     params = {}
     if args.user_id:
         params["userId"] = args.user_id
@@ -363,7 +557,7 @@ def _fetch_validator_payload(args: argparse.Namespace) -> Any:
 
 
 def _fetch_content_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
-    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    headers = _build_headers(args.api_key)
     url = f"{args.base_url.rstrip('/')}/api/v1/content"
     records: List[Dict[str, Any]] = []
     cursor = None
@@ -483,7 +677,7 @@ def _resolve_branch_id(args: argparse.Namespace) -> Optional[str]:
     if not args.branch_name:
         return None
 
-    headers = _build_headers(args.api_key, args.auth_header, args.auth_scheme)
+    headers = _build_headers(args.api_key)
     cursor = None
     while True:
         params = {}
@@ -543,7 +737,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     if args.raw_response_out:
         _write_json(args.raw_response_out, {"payload": payload})
 
-    issues = _extract_issues(payload, args.issues_path)
+    issues = _extract_issues(payload)
     normalized = _normalize_issues(issues)
 
     previous_payload = _load_json(args.history_in) or {}

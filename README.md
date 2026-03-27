@@ -55,11 +55,36 @@ Optional flags:
 - `--labels` to filter validation results by one or more Omni labels (comma-separated, for example `--labels Verified,Sales`).
 - `--label` as a repeatable form of the same filter (for example `--label Verified --label Sales`).
 - `--include-personal-folders` to include personal folders in the validation search.
-- `--issues-path` to point at the array of issues in the JSON response (dot path). By default, the CLI looks for `issues` arrays or the `content[].queries_and_issues[].issues` and `content[].dashboard_filter_issues` arrays.
 - `--fail-on-new-only` to fail only when new issues appear vs history.
-- `--auth-header` and `--auth-scheme` to override auth header formatting (defaults to `Authorization: Bearer <token>`).
 
-Environment variables:
+If `.omni-content-validator.yml` exists in the current working directory, the CLI auto-loads it.
+
+## Config File
+
+Copy `.omni-content-validator.example.yml` to `.omni-content-validator.yml` and keep non-secret defaults there.
+
+Supported config keys:
+
+- `base_url`
+- `model_id`
+- `user_id`
+- `branch_id`
+- `branch_name`
+- `labels`
+- `include_personal_folders`
+- `timeout`
+- `fail_on_new_only`
+
+Secrets such as the API key are intentionally not supported in the config file. Keep those in environment variables or GitHub Actions secrets.
+
+Resolution order:
+
+1. CLI flags
+2. `OMNI_*` environment variables
+3. `.omni-content-validator.yml`
+4. built-in defaults
+
+Supported environment overrides:
 
 - `OMNI_BASE_URL`
 - `OMNI_MODEL_ID`
@@ -67,11 +92,19 @@ Environment variables:
 - `OMNI_USER_ID`
 - `OMNI_LABELS` (optional comma-separated label filter, for example `Verified,Sales`)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS`
-- `OMNI_ISSUES_PATH`
+- `OMNI_TIMEOUT` (optional request timeout in seconds)
+- `OMNI_FAIL_ON_NEW_ONLY` (optional `true`/`false`)
 - `OMNI_BRANCH_ID` (optional override if you already know the Omni branch UUID)
 - `OMNI_BRANCH_NAME` (used to resolve the Omni branch UUID by name)
 
-Example local env setup:
+Minimal local setup with a checked-in config file:
+
+```bash
+export OMNI_API_KEY="..."
+omni-content-validator
+```
+
+Ad hoc env-only setup still works:
 
 ```bash
 export OMNI_BASE_URL="https://ernesto.playground.exploreomni.dev"
@@ -80,6 +113,8 @@ export OMNI_API_KEY="..."
 export OMNI_USER_ID="..." # optional
 export OMNI_LABELS="Verified,Sales" # optional
 export OMNI_INCLUDE_PERSONAL_FOLDERS="true" # optional
+export OMNI_FAIL_ON_NEW_ONLY="true" # optional
+omni-content-validator
 ```
 
 ## Secret Safety
@@ -102,7 +137,7 @@ Run it manually across the repo at any time:
 pre-commit run --all-files
 ```
 
-Operationally, secrets should still live in environment variables or GitHub Actions secrets, never in tracked files. `.env` files and `.omni-content-validator/` artifacts are already ignored in `.gitignore`.
+Operationally, secrets should still live in environment variables or GitHub Actions secrets, never in tracked files. `.env` files and `.omni-content-validator/` artifacts are already ignored in `.gitignore`. `.omni-content-validator.yml` is intended to be checked in, so keep secrets out of it.
 
 For server-side blocking before a push lands, enable GitHub Secret Scanning and Push Protection in the repository settings. That setting is outside the repo, so it is not something this codebase can enforce by itself.
 
@@ -118,20 +153,32 @@ The content validator workflow is kept as an example in `.github/workflow-exampl
 
 The content validator example is designed to run on pushes to `main`, pull requests, and manual dispatches. It downloads the latest history artifact from the default branch, runs the validator, uploads a new history artifact, creates a check run, and posts a PR comment for pull requests.
 
-Configure these in GitHub:
+Recommended setup in your repo:
+
+- Check in `.omni-content-validator.yml` with non-secret settings such as `base_url`, `model_id`, labels, and behavior flags.
+- Configure `OMNI_API_KEY` as a GitHub Actions secret.
+- Optionally set `OMNI_*` repo variables or secrets only when you want workflow-specific overrides on top of the checked-in config.
+
+Supported GitHub env overrides:
 
 - `OMNI_API_KEY` (secret)
 - `OMNI_BASE_URL` (variable or secret)
 - `OMNI_MODEL_ID` (variable or secret)
 - `OMNI_USER_ID` (optional variable or secret)
+- `OMNI_LABELS` (optional variable or secret, comma-separated)
+- `OMNI_BRANCH_ID` (optional variable or secret)
+- `OMNI_BRANCH_NAME` (optional variable or secret)
+- `OMNI_TIMEOUT` (optional variable or secret)
+- `OMNI_FAIL_ON_NEW_ONLY` (optional variable or secret)
 - `OMNI_INCLUDE_PERSONAL_FOLDERS` (optional variable or secret)
 
 ### Testing the workflow
 
 1. Copy `.github/workflow-examples/content-validator.yml` to `.github/workflows/content-validator.yml`.
-2. Add the secrets/variables above in GitHub repo settings.
-3. Push to `main` once (or run the workflow manually on `main`) to seed the history artifact.
-4. Open a PR and confirm the check run plus PR comment show the validation results.
+2. Copy `.omni-content-validator.example.yml` to `.omni-content-validator.yml` and fill in your non-secret settings.
+3. Add `OMNI_API_KEY` in GitHub repo settings, plus any optional override variables you want.
+4. Push to `main` once (or run the workflow manually on `main`) to seed the history artifact.
+5. Open a PR and confirm the check run plus PR comment show the validation results.
 
 ## Releases
 

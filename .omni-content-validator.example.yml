@@ -1,0 +1,24 @@
+# Checked-in config shape for customer repositories.
+# Rename this file to `.omni-content-validator.yml` in your repo root.
+# The CLI auto-loads it when present.
+# Keep secrets like the API key in GitHub Actions secrets or environment variables.
+
+base_url: https://your-company.exploreomni.dev
+model_id: 00000000-0000-0000-0000-000000000000
+
+# Optional: resolve a branch by name in PRs, or pin a specific branch id.
+branch_name: ${GITHUB_HEAD_REF}
+# branch_id: 00000000-0000-0000-0000-000000000000
+
+# Optional: act on behalf of a user for org API keys.
+# user_id: 00000000-0000-0000-0000-000000000000
+
+# Optional: validate only a curated subset of content.
+labels:
+  - Verified
+  - Sales
+
+# Optional behavior flags.
+include_personal_folders: false
+fail_on_new_only: true
+timeout: 60

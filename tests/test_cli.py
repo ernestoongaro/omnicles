@@ -2,6 +2,7 @@ import argparse
 import contextlib
 import io
 import os
+import tempfile
 import unittest
 from unittest import mock
 
@@ -19,25 +20,194 @@ class FakeResponse:
         return self._payload
 
 
+@contextlib.contextmanager
+def temporary_workdir():
+    original_cwd = os.getcwd()
+    with tempfile.TemporaryDirectory() as tmpdir:
+        os.chdir(tmpdir)
+        try:
+            yield tmpdir
+        finally:
+            os.chdir(original_cwd)
+
+
 class ParseArgsTests(unittest.TestCase):
-    @mock.patch.dict(os.environ, {"OMNI_LABELS": "Verified, Sales, Verified"})
+    def write_config(self, directory, content):
+        path = os.path.join(directory, ".omni-content-validator.yml")
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(content.lstrip())
+
+    @mock.patch.dict(os.environ, {"OMNI_API_KEY": "secret"}, clear=True)
+    def test_parse_args_uses_config_file_defaults(self):
+        with temporary_workdir() as tmpdir:
+            self.write_config(
+                tmpdir,
+                """
+base_url: https://omni.example
+model_id: model-1
+branch_name: feature-branch
+labels:
+  - Verified
+  - Sales
+include_personal_folders: true
+timeout: 45
+fail_on_new_only: true
+""",
+            )
+
+            args = cli._parse_args([])
+
+        self.assertEqual(args.base_url, "https://omni.example")
+        self.assertEqual(args.model_id, "model-1")
+        self.assertEqual(args.api_key, "secret")
+        self.assertEqual(args.branch_name, "feature-branch")
+        self.assertEqual(args.labels, ["Verified", "Sales"])
+        self.assertTrue(args.include_personal_folders)
+        self.assertEqual(args.timeout, 45)
+        self.assertTrue(args.fail_on_new_only)
+
+    @mock.patch.dict(
+        os.environ,
+        {
+            "OMNI_API_KEY": "secret",
+            "OMNI_LABELS": "Sales,EMEA",
+            "OMNI_TIMEOUT": "90",
+            "OMNI_FAIL_ON_NEW_ONLY": "true",
+        },
+        clear=True,
+    )
+    def test_parse_args_prefers_env_over_config(self):
+        with temporary_workdir() as tmpdir:
+            self.write_config(
+                tmpdir,
+                """
+base_url: https://omni.example
+model_id: model-1
+labels:
+  - Verified
+timeout: 45
+fail_on_new_only: false
+""",
+            )
+
+            args = cli._parse_args([])
+
+        self.assertEqual(args.labels, ["Sales", "EMEA"])
+        self.assertEqual(args.timeout, 90)
+        self.assertTrue(args.fail_on_new_only)
+
+    @mock.patch.dict(
+        os.environ,
+        {
+            "OMNI_API_KEY": "secret",
+            "OMNI_LABELS": "Sales",
+            "OMNI_TIMEOUT": "90",
+        },
+        clear=True,
+    )
+    def test_parse_args_prefers_cli_over_env_and_config(self):
+        with temporary_workdir() as tmpdir:
+            self.write_config(
+                tmpdir,
+                """
+base_url: https://omni.example
+model_id: model-1
+labels:
+  - Verified
+timeout: 45
+""",
+            )
+
+            args = cli._parse_args(
+                [
+                    "--label",
+                    "Finance",
+                    "--label",
+                    "Sales",
+                    "--timeout",
+                    "15",
+                ]
+            )
+
+        self.assertEqual(args.labels, ["Finance", "Sales"])
+        self.assertEqual(args.timeout, 15)
+
+    @mock.patch.dict(
+        os.environ,
+        {
+            "OMNI_API_KEY": "secret",
+            "GITHUB_HEAD_REF": "feature/config-file",
+        },
+        clear=True,
+    )
+    def test_parse_args_expands_env_vars_in_config(self):
+        with temporary_workdir() as tmpdir:
+            self.write_config(
+                tmpdir,
+                """
+base_url: https://omni.example
+model_id: model-1
+branch_name: ${GITHUB_HEAD_REF}
+""",
+            )
+
+            args = cli._parse_args([])
+
+        self.assertEqual(args.branch_name, "feature/config-file")
+
+    @mock.patch.dict(os.environ, {}, clear=True)
+    def test_parse_args_rejects_unknown_config_keys(self):
+        with temporary_workdir() as tmpdir:
+            self.write_config(
+                tmpdir,
+                """
+base_url: https://omni.example
+model_id: model-1
+unsupported_key: value
+""",
+            )
+
+            with self.assertRaises(SystemExit) as exc:
+                cli._parse_args([])
+
+        self.assertIn("Unsupported keys", str(exc.exception))
+
+    @mock.patch.dict(
+        os.environ, {"OMNI_LABELS": "Verified, Sales, Verified"}, clear=True
+    )
     def test_parse_args_uses_env_labels_when_cli_missing(self):
-        args = cli._parse_args([])
+        with temporary_workdir():
+            args = cli._parse_args([])
         self.assertEqual(args.labels, ["Verified", "Sales"])
 
-    @mock.patch.dict(os.environ, {"OMNI_LABELS": "Ignored"})
+    @mock.patch.dict(os.environ, {"OMNI_LABELS": "Ignored"}, clear=True)
     def test_parse_args_prefers_cli_labels_and_dedupes(self):
-        args = cli._parse_args(
-            [
-                "--labels",
-                "Verified,Sales",
-                "--label",
-                "Sales",
-                "--label",
-                "Finance",
-            ]
-        )
+        with temporary_workdir():
+            args = cli._parse_args(
+                [
+                    "--labels",
+                    "Verified,Sales",
+                    "--label",
+                    "Sales",
+                    "--label",
+                    "Finance",
+                ]
+            )
         self.assertEqual(args.labels, ["Verified", "Sales", "Finance"])
+
+    @mock.patch.dict(
+        os.environ,
+        {
+            "OMNI_TIMEOUT": "90",
+            "OMNI_FAIL_ON_NEW_ONLY": "true",
+        },
+        clear=True,
+    )
+    def test_parse_args_reads_env_backed_workflow_options(self):
+        with temporary_workdir():
+            args = cli._parse_args([])
+        self.assertEqual(args.timeout, 90)
+        self.assertTrue(args.fail_on_new_only)
 
 
 class IssueIdentityTests(unittest.TestCase):
@@ -66,8 +236,6 @@ class LabelFilteringTests(unittest.TestCase):
         args = argparse.Namespace(
             base_url="https://omni.example",
             api_key="secret",
-            auth_header="Authorization",
-            auth_scheme="Bearer",
             labels=["Verified", "Sales"],
             user_id="user-1",
             branch_id="branch-1",
