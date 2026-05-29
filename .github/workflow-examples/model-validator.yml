@@ -1,0 +1,25 @@
+name: Model Validator
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate-model:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Run model validator
+        uses: ernestoongaro/omnicles/.github/actions/model-validator@main
+        with:
+          api-key: ${{ secrets.OMNI_API_KEY }}

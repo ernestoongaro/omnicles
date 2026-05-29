@@ -1,24 +1,30 @@
-# Checked-in config shape for customer repositories.
+# Checked-in config for omni-model-validator and omni-content-validator.
 # Rename this file to `.omni-content-validator.yml` in your repo root.
-# The CLI auto-loads it when present.
-# Keep secrets like the API key in GitHub Actions secrets or environment variables.
+# Both CLIs auto-load it when present.
+# Keep secrets (api_key) in GitHub Actions secrets or environment variables — never here.
 
-base_url: https://your-company.exploreomni.dev
+base_url: https://your-company.omniapp.co
 model_id: 00000000-0000-0000-0000-000000000000
 
-# Optional: resolve a branch by name in PRs, or pin a specific branch id.
+# Optional: resolve a branch by name. In GitHub Actions, GITHUB_HEAD_REF is
+# automatically set to the PR branch name — ideal for model validation on PRs.
 branch_name: ${GITHUB_HEAD_REF}
 # branch_id: 00000000-0000-0000-0000-000000000000
 
-# Optional: act on behalf of a user for org API keys.
-# user_id: 00000000-0000-0000-0000-000000000000
-
-# Optional: validate only a curated subset of content.
-labels:
-  - Verified
-  - Sales
-
-# Optional behavior flags.
-include_personal_folders: false
-fail_on_new_only: true
+# Optional behavior flags (apply to both validators unless noted).
+fail_on_new_only: false  # only fail when new issues appear vs history
 timeout: 60
+
+# Model validator only: treat warnings as informational, fail on errors only.
+# errors_only: false
+
+# Content validator only: validate content in personal folders.
+# include_personal_folders: false
+
+# Content validator only: restrict validation to content with these labels.
+# labels:
+#   - Verified
+#   - Sales
+
+# Content validator only: act on behalf of a user for org API keys.
+# user_id: 00000000-0000-0000-0000-000000000000
