@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 This file is managed by Release Please.
 
+## [0.3.1](https://github.com/ernestoongaro/omnicles/compare/0.3.0...0.3.1) (2026-08-13)
+
+
+### Bug Fixes
+
+* remove unsupported branch_id param from /api/v1/content requests ([77436b9](https://github.com/ernestoongaro/omnicles/commit/77436b9da9b45fa47698c0be5c4ec8915ec11c1c)), closes [#18](https://github.com/ernestoongaro/omnicles/issues/18)
+
 ## [0.3.0](https://github.com/ernestoongaro/omnicles/compare/0.2.1...0.3.0) (2026-03-25)
 
 
