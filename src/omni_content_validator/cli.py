@@ -571,8 +571,6 @@ def _fetch_content_records(args: argparse.Namespace) -> List[Dict[str, Any]]:
             params["cursor"] = cursor
         if args.user_id:
             params["userId"] = args.user_id
-        if args.branch_id:
-            params["branch_id"] = args.branch_id
         if args.include_personal_folders:
             params["include_personal_folders"] = "true"
 
