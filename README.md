@@ -1,5 +1,11 @@
 # Omni Content Validator CI
 
+> [!IMPORTANT]
+> **This project is archived and no longer maintained.** It has been superseded by
+> [**OmniFlow**](https://github.com/exploreomni/OmniFlow) — an open-source, security-first
+> CI/CD validation and deployment companion for the Omni semantic layer.
+> Please use OmniFlow for new projects. This repository remains available as a read-only reference.
+
 ![Omni Content Validator](assets/logo.png)
 
 CLI plus GitHub Actions support for running Omni Content Validator, keeping a history artifact, and surfacing new vs existing failures.
