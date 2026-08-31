@@ -490,5 +490,149 @@ class MainFlowTests(unittest.TestCase):
         )
 
 
+class ModelIssueTests(unittest.TestCase):
+    def test_model_issue_summary_openapi_format(self):
+        issue = {"message": "Field not found", "severity": "error", "view": "orders", "field": "total"}
+        self.assertEqual(cli._model_issue_summary(issue), "orders.total: Field not found")
+
+    def test_model_issue_summary_docs_format(self):
+        issue = {"message": "No view found", "is_warning": False, "yaml_path": "blob_sales.topic"}
+        self.assertEqual(cli._model_issue_summary(issue), "blob_sales.topic: No view found")
+
+    def test_model_issue_summary_message_only(self):
+        issue = {"message": "Something is wrong", "severity": "warning"}
+        self.assertEqual(cli._model_issue_summary(issue), "Something is wrong")
+
+    def test_issue_is_warning_openapi(self):
+        self.assertTrue(cli._issue_is_warning({"severity": "warning"}))
+        self.assertFalse(cli._issue_is_warning({"severity": "error"}))
+
+    def test_issue_is_warning_docs_format(self):
+        self.assertTrue(cli._issue_is_warning({"is_warning": True}))
+        self.assertFalse(cli._issue_is_warning({"is_warning": False}))
+
+    def test_issue_is_warning_defaults_false(self):
+        self.assertFalse(cli._issue_is_warning({"message": "no severity field"}))
+
+
+class ModelValidatorMainTests(unittest.TestCase):
+    @mock.patch.object(cli, "_write_json")
+    @mock.patch.object(cli, "_fetch_model_validate_payload")
+    @mock.patch.object(cli, "_load_json")
+    def test_main_model_reports_error_and_warning_counts(
+        self, load_json, fetch_payload, write_json
+    ):
+        fetch_payload.return_value = {
+            "valid": False,
+            "issues": [
+                {"message": "Bad view", "severity": "error", "view": "orders", "field": "total"},
+                {"message": "Deprecated field", "severity": "warning", "view": "users", "field": "name"},
+            ],
+        }
+        load_json.return_value = {"issues": []}
+
+        exit_code = cli.main_model(
+            [
+                "--base-url", "https://omni.example",
+                "--model-id", "model-1",
+                "--api-key", "secret",
+            ]
+        )
+
+        self.assertEqual(exit_code, 1)
+        report = write_json.call_args_list[0].args[1]
+        self.assertEqual(report["error_count"], 1)
+        self.assertEqual(report["warning_count"], 1)
+        self.assertEqual(report["total_issues"], 2)
+        self.assertFalse(report["model_valid"])
+
+    @mock.patch.object(cli, "_write_json")
+    @mock.patch.object(cli, "_fetch_model_validate_payload")
+    @mock.patch.object(cli, "_load_json")
+    def test_main_model_errors_only_excludes_warnings(
+        self, load_json, fetch_payload, write_json
+    ):
+        fetch_payload.return_value = {
+            "valid": False,
+            "issues": [
+                {"message": "Bad view", "severity": "error", "view": "orders"},
+                {"message": "Deprecated field", "severity": "warning", "view": "users"},
+            ],
+        }
+        load_json.return_value = {"issues": []}
+
+        exit_code = cli.main_model(
+            [
+                "--base-url", "https://omni.example",
+                "--model-id", "model-1",
+                "--api-key", "secret",
+                "--errors-only",
+            ]
+        )
+
+        self.assertEqual(exit_code, 1)
+        report = write_json.call_args_list[0].args[1]
+        self.assertEqual(report["total_issues"], 1)
+        self.assertEqual(report["error_count"], 1)
+        self.assertEqual(report["warning_count"], 1)
+        self.assertTrue(report["errors_only"])
+
+    @mock.patch.object(cli, "_write_json")
+    @mock.patch.object(cli, "_fetch_model_validate_payload")
+    @mock.patch.object(cli, "_load_json")
+    def test_main_model_valid_returns_zero(
+        self, load_json, fetch_payload, write_json
+    ):
+        fetch_payload.return_value = {"valid": True, "issues": []}
+        load_json.return_value = {"issues": []}
+
+        exit_code = cli.main_model(
+            [
+                "--base-url", "https://omni.example",
+                "--model-id", "model-1",
+                "--api-key", "secret",
+            ]
+        )
+
+        self.assertEqual(exit_code, 0)
+        report = write_json.call_args_list[0].args[1]
+        self.assertTrue(report["model_valid"])
+        self.assertEqual(report["total_issues"], 0)
+
+    @mock.patch.object(cli, "_write_json")
+    @mock.patch.object(cli, "_fetch_model_validate_payload")
+    @mock.patch.object(cli, "_load_json")
+    def test_main_model_tracks_new_and_resolved(
+        self, load_json, fetch_payload, write_json
+    ):
+        current_issue = {"message": "Bad view", "severity": "error", "view": "orders"}
+        fetch_payload.return_value = {"valid": False, "issues": [current_issue]}
+
+        # Simulate a previously recorded issue that is now gone
+        old_issue = {"message": "Old problem", "severity": "error", "view": "sales"}
+        old_normalized = [
+            {
+                "id": cli._issue_identity(old_issue),
+                "summary": cli._model_issue_summary(old_issue),
+                "raw": old_issue,
+            }
+        ]
+        load_json.return_value = {"issues": old_normalized}
+
+        exit_code = cli.main_model(
+            [
+                "--base-url", "https://omni.example",
+                "--model-id", "model-1",
+                "--api-key", "secret",
+            ]
+        )
+
+        self.assertEqual(exit_code, 1)
+        report = write_json.call_args_list[0].args[1]
+        self.assertEqual(report["new_issues"], 1)
+        self.assertEqual(report["resolved_issues"], 1)
+        self.assertEqual(report["existing_issues"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

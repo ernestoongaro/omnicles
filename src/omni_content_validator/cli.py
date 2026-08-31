@@ -20,6 +20,7 @@ CONFIG_KEYS = {
     "include_personal_folders",
     "timeout",
     "fail_on_new_only",
+    "errors_only",
 }
 
 
@@ -700,6 +701,243 @@ def _resolve_branch_id(args: argparse.Namespace) -> Optional[str]:
         cursor = payload.get("pageInfo", {}).get("nextCursor")
         if not cursor:
             return None
+
+
+def _model_issue_summary(issue: Any) -> str:
+    if isinstance(issue, str):
+        return issue
+    if not isinstance(issue, dict):
+        return str(issue)
+
+    message = issue.get("message", "")
+    if not isinstance(message, str):
+        message = str(message)
+
+    # OpenAPI format: view + field
+    view = issue.get("view")
+    field = issue.get("field")
+    location_parts = []
+    if isinstance(view, str) and view.strip():
+        location_parts.append(view.strip())
+    if isinstance(field, str) and field.strip():
+        location_parts.append(field.strip())
+    if location_parts:
+        location = ".".join(location_parts)
+        return f"{location}: {message}" if message else location
+
+    # Docs format: yaml_path
+    yaml_path = issue.get("yaml_path")
+    if isinstance(yaml_path, str) and yaml_path.strip():
+        return f"{yaml_path.strip()}: {message}" if message else yaml_path.strip()
+
+    return message or json.dumps(issue, sort_keys=True)
+
+
+def _issue_is_warning(issue: Any) -> bool:
+    if not isinstance(issue, dict):
+        return False
+    # OpenAPI format: severity = "error" | "warning"
+    severity = issue.get("severity")
+    if severity == "warning":
+        return True
+    if severity == "error":
+        return False
+    # Docs format: is_warning = bool
+    is_warning = issue.get("is_warning")
+    if isinstance(is_warning, bool):
+        return is_warning
+    return False
+
+
+def _fetch_model_validate_payload(args: argparse.Namespace) -> Any:
+    url = f"{args.base_url.rstrip('/')}/api/v1/models/{args.model_id}/validate"
+    headers = _build_headers(args.api_key)
+    params = {}
+    if args.branch_id:
+        params["branchId"] = args.branch_id
+
+    response = requests.get(url, headers=headers, params=params, timeout=args.timeout)
+    if not response.ok:
+        raise SystemExit(
+            f"Model validator failed: {response.status_code} {response.text}"
+        )
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise SystemExit(f"Model validator did not return JSON: {exc}") from exc
+
+    return payload
+
+
+def _parse_model_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run Omni model validator and track history",
+    )
+    parser.add_argument("--base-url")
+    parser.add_argument("--model-id")
+    parser.add_argument("--api-key")
+    parser.add_argument("--branch-id")
+    parser.add_argument("--branch-name")
+    parser.add_argument("--timeout", type=int)
+    parser.add_argument(
+        "--history-in",
+        default=".omni-content-validator/model-validator-history.json",
+    )
+    parser.add_argument(
+        "--history-out",
+        default=".omni-content-validator/model-validator-history.json",
+    )
+    parser.add_argument(
+        "--report-out",
+        default=".omni-content-validator/model-validator-report.json",
+    )
+    parser.add_argument("--raw-response-out", default=None)
+    parser.add_argument(
+        "--fail-on-new-only",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Only fail when there are new issues compared to history",
+    )
+    parser.add_argument(
+        "--errors-only",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Ignore warnings; only count and fail on errors",
+    )
+    args = parser.parse_args(argv)
+
+    config = _load_config()
+
+    args.base_url = _resolve_string_option(
+        args.base_url, "OMNI_BASE_URL", config, "base_url"
+    )
+    args.model_id = _resolve_string_option(
+        args.model_id, "OMNI_MODEL_ID", config, "model_id"
+    )
+    args.api_key = _normalize_string_value(args.api_key or os.getenv("OMNI_API_KEY"))
+    args.branch_id = _resolve_string_option(
+        args.branch_id, "OMNI_BRANCH_ID", config, "branch_id"
+    )
+    args.branch_name = _resolve_string_option(
+        args.branch_name, "OMNI_BRANCH_NAME", config, "branch_name"
+    )
+    args.timeout = _resolve_int_option(
+        args.timeout, "OMNI_TIMEOUT", config, "timeout", default=60
+    )
+    args.fail_on_new_only = _resolve_bool_option(
+        args.fail_on_new_only,
+        "OMNI_FAIL_ON_NEW_ONLY",
+        config,
+        "fail_on_new_only",
+        default=False,
+    )
+    args.errors_only = _resolve_bool_option(
+        args.errors_only,
+        "OMNI_ERRORS_ONLY",
+        config,
+        "errors_only",
+        default=False,
+    )
+    return args
+
+
+def main_model(argv: Optional[List[str]] = None) -> int:
+    args = _parse_model_args(argv)
+    _validate_args(args)
+
+    resolved_branch_id = _resolve_branch_id(args)
+    if resolved_branch_id:
+        args.branch_id = resolved_branch_id
+        if args.branch_name:
+            print(f"Resolved branch '{args.branch_name}' to id {resolved_branch_id}")
+        else:
+            print(f"Using branch id {resolved_branch_id}")
+    elif args.branch_name:
+        print(f"No matching Omni branch found for '{args.branch_name}', using default")
+
+    payload = _fetch_model_validate_payload(args)
+
+    if args.raw_response_out:
+        _write_json(args.raw_response_out, {"payload": payload})
+
+    if isinstance(payload, dict):
+        raw_issues = payload.get("issues", [])
+        if not isinstance(raw_issues, list):
+            raw_issues = []
+    elif isinstance(payload, list):
+        raw_issues = payload
+    else:
+        raw_issues = []
+
+    all_normalized = [
+        {"id": _issue_identity(issue), "summary": _model_issue_summary(issue), "raw": issue}
+        for issue in raw_issues
+    ]
+
+    if args.errors_only:
+        normalized = [item for item in all_normalized if not _issue_is_warning(item["raw"])]
+    else:
+        normalized = all_normalized
+
+    error_count = sum(1 for item in all_normalized if not _issue_is_warning(item["raw"]))
+    warning_count = sum(1 for item in all_normalized if _issue_is_warning(item["raw"]))
+
+    previous_payload = _load_json(args.history_in) or {}
+    previous_issues = previous_payload.get("issues", [])
+
+    new_items, existing_items, resolved_items = _partition_issues(
+        normalized, previous_issues
+    )
+
+    model_valid = payload.get("valid") if isinstance(payload, dict) else None
+
+    report = {
+        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "base_url": args.base_url,
+        "model_id": args.model_id,
+        "branch_id": args.branch_id,
+        "branch_name": args.branch_name,
+        "model_valid": model_valid,
+        "errors_only": args.errors_only,
+        "total_issues": len(normalized),
+        "error_count": error_count,
+        "warning_count": warning_count,
+        "new_issues": len(new_items),
+        "existing_issues": len(existing_items),
+        "resolved_issues": len(resolved_items),
+        "issues": normalized,
+        "new_issue_samples": new_items[:20],
+        "existing_issue_samples": existing_items[:20],
+        "resolved_issue_samples": resolved_items[:20],
+    }
+
+    _write_json(args.report_out, report)
+    _write_json(
+        args.history_out,
+        {
+            "generated_at": report["generated_at"],
+            "base_url": args.base_url,
+            "model_id": args.model_id,
+            "branch_id": args.branch_id,
+            "errors_only": args.errors_only,
+            "issues": normalized,
+        },
+    )
+
+    print(
+        "Model validator results: "
+        f"errors={error_count} "
+        f"warnings={warning_count} "
+        f"total={report['total_issues']} "
+        f"new={report['new_issues']} "
+        f"existing={report['existing_issues']} "
+        f"resolved={report['resolved_issues']}"
+    )
+
+    if args.fail_on_new_only:
+        return 1 if report["new_issues"] > 0 else 0
+    return 1 if report["total_issues"] > 0 else 0
 
 
 def main(argv: Optional[List[str]] = None) -> int:

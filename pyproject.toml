@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 omni-content-validator = "omni_content_validator.cli:main"
+omni-model-validator = "omni_content_validator.cli:main_model"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
